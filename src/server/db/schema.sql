@@ -28,9 +28,9 @@ CREATE TABLE cards (
     deck_id INTEGER REFERENCES decks(id) ON DELETE CASCADE,
     front TEXT NOT NULL,
     back TEXT NOT NULL,
-    interval INTEGER, -- For spaced repetition
-    ease_factor FLOAT, -- For spaced repetition
-    due_date TIMESTAMP WITH TIME ZONE, -- For spaced repetition
+    interval INTEGER DEFAULT 0,
+    ease_factor FLOAT DEFAULT 2.5,
+    due_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -56,8 +56,8 @@ CREATE TABLE question_options (
     id SERIAL PRIMARY KEY,
     question_id INTEGER REFERENCES questions(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
-    is_correct BOOLEAN, -- For multiple-choice only
-    match_id INTEGER, -- For matching, to group corresponding items
+    is_correct BOOLEAN,
+    match_id INTEGER,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -65,13 +65,14 @@ CREATE TABLE user_answers (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     question_id INTEGER REFERENCES questions(id) ON DELETE CASCADE,
-    answer TEXT NOT NULL, -- User's answer (can be an option ID, typed text, etc.)
+    answer TEXT NOT NULL,
     is_correct BOOLEAN NOT NULL,
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Create indexes for better query performance
 CREATE INDEX idx_cards_deck_id ON cards(deck_id);
+CREATE INDEX idx_cards_due_date ON cards(due_date);
 CREATE INDEX idx_questions_test_id ON questions(test_id);
 CREATE INDEX idx_question_options_question_id ON question_options(question_id);
 CREATE INDEX idx_user_answers_user_id ON user_answers(user_id);
