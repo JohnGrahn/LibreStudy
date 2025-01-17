@@ -1,7 +1,8 @@
 import { Context } from 'hono';
 import { sign } from 'hono/jwt';
 import { sha256 } from 'hono/utils/crypto';
-import { UserModel } from '../models/user';
+import userModel from '../models/UserModel';
+import type { User } from '../models/UserModel';
 
 export class AuthService {
   private static readonly JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -37,19 +38,21 @@ export class AuthService {
    * Login a user with email/username and password
    */
   static async login(emailOrUsername: string, password: string): Promise<{ token: string; user: any } | null> {
-    // Try to find user by email first, then username
-    const user = await UserModel.findByEmail(emailOrUsername) || 
-                await UserModel.findByUsername(emailOrUsername);
+    // Try to find user by email or username
+    const user = await userModel.findByEmail(emailOrUsername) || 
+                await userModel.findByUsername(emailOrUsername);
 
     if (!user) {
       return null;
     }
 
+    // Verify password
     const isValid = await this.verifyPassword(password, user.password_hash);
     if (!isValid) {
       return null;
     }
 
+    // Generate token
     const token = await this.generateToken(user.id, user.username);
     return { token, user: { id: user.id, username: user.username, email: user.email } };
   }
@@ -59,23 +62,21 @@ export class AuthService {
    */
   static async register(username: string, email: string, password: string): Promise<{ token: string; user: any } | null> {
     // Check if username or email already exists
-    const [existingUsername, existingEmail] = await Promise.all([
-      UserModel.findByUsername(username),
-      UserModel.findByEmail(email)
-    ]);
-
-    if (existingUsername || existingEmail) {
+    const existingUser = await userModel.findByUsername(username) || 
+                        await userModel.findByEmail(email);
+    if (existingUser) {
       return null;
     }
 
-    // Create new user
-    const passwordHash = await this.hashPassword(password);
-    const user = await UserModel.create({
+    // Hash password and create user
+    const hashedPassword = await this.hashPassword(password);
+    const user = await userModel.createUser({
       username,
       email,
-      password_hash: passwordHash
+      password: hashedPassword
     });
 
+    // Generate token
     const token = await this.generateToken(user.id, user.username);
     return { token, user: { id: user.id, username: user.username, email: user.email } };
   }

@@ -1,4 +1,4 @@
-import BaseModel from './BaseModel';
+import BaseModel, { QueryOptions } from './BaseModel';
 import { createHash } from 'crypto';
 
 export interface User {
@@ -30,6 +30,24 @@ export class UserModel extends BaseModel {
     return createHash('sha256').update(password).digest('hex');
   }
 
+  // Find user by ID
+  async findById(id: number): Promise<User | null> {
+    const results = await this.find({ id });
+    return results[0] || null;
+  }
+
+  // Find user by username
+  async findByUsername(username: string): Promise<User | null> {
+    const results = await this.find({ username });
+    return results[0] || null;
+  }
+
+  // Find user by email
+  async findByEmail(email: string): Promise<User | null> {
+    const results = await this.find({ email });
+    return results[0] || null;
+  }
+
   // Create a new user
   async createUser(data: CreateUserData): Promise<User> {
     const userData = {
@@ -37,41 +55,24 @@ export class UserModel extends BaseModel {
       email: data.email,
       password_hash: this.hashPassword(data.password)
     };
-    return this.create(userData);
+    const results = await this.create(userData);
+    return results[0];
   }
 
   // Update a user
-  async updateUser(id: number, data: UpdateUserData): Promise<User | null> {
+  async updateUser(id: number, data: UpdateUserData): Promise<User> {
     const updateData: Record<string, any> = {};
-    
     if (data.username) updateData.username = data.username;
     if (data.email) updateData.email = data.email;
     if (data.password) updateData.password_hash = this.hashPassword(data.password);
-
-    const result = await this.update({ id }, updateData);
-    return result[0] || null;
-  }
-
-  // Find user by username or email
-  async findByCredentials(username: string): Promise<User | null> {
-    return this.findOne({
-      username
-    });
-  }
-
-  // Verify user credentials
-  async verifyCredentials(username: string, password: string): Promise<User | null> {
-    const user = await this.findByCredentials(username);
-    if (!user) return null;
-
-    const hashedPassword = this.hashPassword(password);
-    return user.password_hash === hashedPassword ? user : null;
+    
+    const results = await super.update({ id }, updateData);
+    return results[0];
   }
 
   // Delete a user
-  async deleteUser(id: number): Promise<User | null> {
-    const result = await this.delete({ id });
-    return result[0] || null;
+  async deleteUser(id: number): Promise<void> {
+    await super.delete({ id });
   }
 }
 

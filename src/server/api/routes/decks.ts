@@ -1,84 +1,82 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { DeckModel } from '../../models/deck';
+import deckModel from '../../models/DeckModel';
+import type { CreateDeckData, UpdateDeckData } from '../../models/DeckModel';
 
 const deckRoutes = new Hono();
 
 // Validation schemas
 const createDeckSchema = z.object({
   user_id: z.number(),
-  title: z.string().min(1).max(255),
-  description: z.string().max(1000).optional()
+  title: z.string(),
+  description: z.string().optional()
 });
 
-const updateDeckSchema = createDeckSchema.partial();
+const updateDeckSchema = z.object({
+  title: z.string().optional(),
+  description: z.string().optional()
+});
 
-// Routes
+// Create a new deck
 deckRoutes.post('/', zValidator('json', createDeckSchema), async (c) => {
   const input = c.req.valid('json');
-  const deck = await DeckModel.create({
+  const data: CreateDeckData = {
     user_id: input.user_id,
     title: input.title,
     description: input.description
-  });
+  };
+  const deck = await deckModel.createDeck(data);
   return c.json(deck, 201);
 });
 
+// Get a deck by ID
 deckRoutes.get('/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
-  const deck = await DeckModel.findById(id);
-
+  const userId = parseInt(c.req.query('user_id') || '0');
+  
+  const deck = await deckModel.getDeck(id, userId);
   if (!deck) {
     return c.json({ error: 'Deck not found' }, 404);
   }
-
   return c.json(deck);
 });
 
-deckRoutes.get('/user/:userId', async (c) => {
-  const userId = parseInt(c.req.param('userId'));
-  const decks = await DeckModel.findByUserId(userId);
+// Get all decks for a user
+deckRoutes.get('/', async (c) => {
+  const userId = parseInt(c.req.query('user_id') || '0');
+  const decks = await deckModel.getUserDecks(userId);
   return c.json(decks);
 });
 
-deckRoutes.get('/search', async (c) => {
-  const userId = parseInt(c.req.query('userId') || '');
-  const query = c.req.query('q') || '';
-
-  if (!userId) {
-    return c.json({ error: 'User ID is required' }, 400);
-  }
-
-  const decks = await DeckModel.search(userId, query);
-  return c.json(decks);
-});
-
+// Update a deck
 deckRoutes.patch('/:id', zValidator('json', updateDeckSchema), async (c) => {
   const id = parseInt(c.req.param('id'));
-  const updates = c.req.valid('json');
-
-  // Check if deck exists
-  const existingDeck = await DeckModel.findById(id);
-  if (!existingDeck) {
+  const userId = parseInt(c.req.query('user_id') || '0');
+  const input = c.req.valid('json');
+  
+  const data: UpdateDeckData = {
+    title: input.title,
+    description: input.description
+  };
+  
+  const deck = await deckModel.updateDeck(id, userId, data);
+  if (!deck) {
     return c.json({ error: 'Deck not found' }, 404);
   }
-
-  const updatedDeck = await DeckModel.update(id, updates);
-  return c.json(updatedDeck);
+  return c.json(deck);
 });
 
+// Delete a deck
 deckRoutes.delete('/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
+  const userId = parseInt(c.req.query('user_id') || '0');
   
-  // Check if deck exists
-  const existingDeck = await DeckModel.findById(id);
-  if (!existingDeck) {
+  const deck = await deckModel.deleteDeck(id, userId);
+  if (!deck) {
     return c.json({ error: 'Deck not found' }, 404);
   }
-
-  await DeckModel.delete(id);
-  return c.json({ success: true });
+  return c.json(deck);
 });
 
-export { deckRoutes }; 
+export default deckRoutes; 

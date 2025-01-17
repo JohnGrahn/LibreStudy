@@ -38,4 +38,4 @@ progressRoutes.get('/decks/:deckId', async (c) => {
   return c.json(progress);
 });
 
-export { progressRoutes }; 
+export default progressRoutes; 

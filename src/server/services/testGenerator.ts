@@ -1,8 +1,10 @@
-import { Card } from '../models/card';
-import { Test, TestModel } from '../models/test';
-import { Question, QuestionModel, QuestionType } from '../models/question';
-import { DeckModel } from '../models/deck';
-import { CardModel } from '../models/card';
+import type { Card } from '../models/CardModel';
+import cardModel from '../models/CardModel';
+import type { Test } from '../models/TestModel';
+import testModel from '../models/TestModel';
+import type { Question, QuestionType } from '../models/QuestionModel';
+import questionModel from '../models/QuestionModel';
+import deckModel from '../models/DeckModel';
 
 export interface GenerateTestOptions {
   userId: number;
@@ -25,7 +27,7 @@ export class TestGeneratorService {
    * Generate a test from a deck of flashcards
    */
   static async generateTest(options: GenerateTestOptions): Promise<Test | null> {
-    const deck = await DeckModel.findById(options.deckId);
+    const deck = await deckModel.getDeck(options.deckId, options.userId);
     if (!deck) {
       return null;
     }
@@ -40,7 +42,7 @@ export class TestGeneratorService {
     }
 
     // Create the test
-    const test = await TestModel.create({
+    const test = await testModel.createTest({
       user_id: options.userId,
       deck_id: options.deckId,
       title: options.title,
@@ -48,11 +50,9 @@ export class TestGeneratorService {
     });
 
     // Generate questions for each card
-    const questionTypes = options.questionTypes || this.DEFAULT_QUESTION_TYPES;
-    for (const card of cards) {
-      const type = this.getRandomQuestionType(questionTypes);
-      await this.generateQuestion(test.id, card, type);
-    }
+    await Promise.all(
+      cards.map(card => this.generateQuestionFromCard(test.id, card))
+    );
 
     return test;
   }
@@ -61,136 +61,81 @@ export class TestGeneratorService {
    * Get random cards from a deck
    */
   private static async getRandomCards(deckId: number, count: number): Promise<Card[]> {
-    const cards = await CardModel.findByDeckId(deckId);
+    const cards = await cardModel.getDeckCards(deckId);
     if (cards.length === 0) {
       return [];
     }
 
-    // Shuffle and slice
-    const shuffled = [...cards].sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, count);
+    // Shuffle array and take the first 'count' elements
+    return cards
+      .sort(() => Math.random() - 0.5)
+      .slice(0, Math.min(count, cards.length));
   }
 
   /**
-   * Get a random question type from the available types
+   * Generate a question from a flashcard
    */
-  private static getRandomQuestionType(types: QuestionType[]): QuestionType {
-    return types[Math.floor(Math.random() * types.length)];
-  }
+  private static async generateQuestionFromCard(testId: number, card: Card): Promise<Question> {
+    // Randomly select a question type
+    const questionType = this.DEFAULT_QUESTION_TYPES[
+      Math.floor(Math.random() * this.DEFAULT_QUESTION_TYPES.length)
+    ];
 
-  /**
-   * Generate a question based on a flashcard
-   */
-  private static async generateQuestion(
-    testId: number,
-    card: Card,
-    type: QuestionType
-  ): Promise<Question | null> {
-    switch (type) {
-      case 'multiple_choice':
-        return this.generateMultipleChoiceQuestion(testId, card);
-      case 'true_false':
-        return this.generateTrueFalseQuestion(testId, card);
-      case 'fill_in_the_blank':
-        return this.generateFillInTheBlankQuestion(testId, card);
-      case 'matching':
-        return this.generateMatchingQuestion(testId, card);
-      default:
-        return null;
-    }
-  }
-
-  /**
-   * Generate a multiple-choice question
-   */
-  private static async generateMultipleChoiceQuestion(
-    testId: number,
-    card: Card
-  ): Promise<Question> {
-    // Create the question
-    const question = await QuestionModel.create({
+    // Create base question
+    const question = await questionModel.createQuestion({
       test_id: testId,
       card_id: card.id,
-      type: 'multiple_choice',
-      content: card.front,
-      options: [
-        { content: card.back, is_correct: true },
-        // TODO: Generate 3 plausible but incorrect options
-        { content: 'Incorrect option 1', is_correct: false },
-        { content: 'Incorrect option 2', is_correct: false },
-        { content: 'Incorrect option 3', is_correct: false }
-      ]
+      type: questionType,
+      content: card.front
     });
+
+    // Generate options based on question type
+    switch (questionType) {
+      case 'multiple_choice':
+        await this.generateMultipleChoiceOptions(question.id, card);
+        break;
+      case 'true_false':
+        await this.generateTrueFalseOptions(question.id, card);
+        break;
+      case 'fill_in_the_blank':
+        // Fill in the blank doesn't need options
+        break;
+    }
 
     return question;
   }
 
   /**
-   * Generate a true/false question
+   * Generate multiple choice options for a question
    */
-  private static async generateTrueFalseQuestion(
-    testId: number,
-    card: Card
-  ): Promise<Question> {
-    const isTrue = Math.random() < 0.5;
-    const statement = isTrue
-      ? `${card.front} = ${card.back}`
-      : `${card.front} = ${this.generateIncorrectAnswer(card.back)}`;
+  private static async generateMultipleChoiceOptions(questionId: number, card: Card): Promise<void> {
+    // Add correct answer
+    await questionModel.updateQuestionOptions(questionId, [{
+      content: card.back,
+      is_correct: true
+    }]);
 
-    return QuestionModel.create({
-      test_id: testId,
-      card_id: card.id,
-      type: 'true_false',
-      content: statement,
-      options: [
-        { content: 'True', is_correct: isTrue },
-        { content: 'False', is_correct: !isTrue }
-      ]
-    });
+    // TODO: Generate plausible wrong answers
+    // For now, just add some dummy options
+    const wrongOptions = [
+      { content: 'Wrong answer 1', is_correct: false },
+      { content: 'Wrong answer 2', is_correct: false },
+      { content: 'Wrong answer 3', is_correct: false }
+    ];
+
+    await questionModel.updateQuestionOptions(questionId, wrongOptions);
   }
 
   /**
-   * Generate a fill-in-the-blank question
+   * Generate true/false options for a question
    */
-  private static async generateFillInTheBlankQuestion(
-    testId: number,
-    card: Card
-  ): Promise<Question> {
-    const blankText = card.front.replace(/\b\w+\b/, '_____');
+  private static async generateTrueFalseOptions(questionId: number, card: Card): Promise<void> {
+    const isCorrectAnswer = Math.random() > 0.5;
+    const questionContent = isCorrectAnswer ? card.back : 'Wrong answer';
 
-    return QuestionModel.create({
-      test_id: testId,
-      card_id: card.id,
-      type: 'fill_in_the_blank',
-      content: blankText
-    });
-  }
-
-  /**
-   * Generate a matching question
-   */
-  private static async generateMatchingQuestion(
-    testId: number,
-    card: Card
-  ): Promise<Question> {
-    return QuestionModel.create({
-      test_id: testId,
-      card_id: card.id,
-      type: 'matching',
-      content: 'Match the following:',
-      options: [
-        { content: card.front, match_id: 1 },
-        { content: card.back, match_id: 1 }
-        // TODO: Add more matching pairs from other cards
-      ]
-    });
-  }
-
-  /**
-   * Generate an incorrect but plausible answer for true/false questions
-   */
-  private static generateIncorrectAnswer(correctAnswer: string): string {
-    // TODO: Implement more sophisticated incorrect answer generation
-    return `Not ${correctAnswer}`;
+    await questionModel.updateQuestionOptions(questionId, [{
+      content: questionContent,
+      is_correct: isCorrectAnswer
+    }]);
   }
 } 

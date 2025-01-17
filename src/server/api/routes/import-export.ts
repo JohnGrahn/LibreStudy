@@ -84,4 +84,4 @@ importExportRoutes.get('/export/csv/:deckId', async (c) => {
   return c.text(csvData);
 });
 
-export { importExportRoutes }; 
+export default importExportRoutes; 

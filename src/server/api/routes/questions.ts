@@ -1,12 +1,14 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { QuestionModel, QuestionType } from '../../models/question';
+import questionModel from '../../models/QuestionModel';
+import type { QuestionType, CreateQuestionData, UpdateQuestionData, QuestionOption } from '../../models/QuestionModel';
 
 const questionRoutes = new Hono();
 
 // Validation schemas
 const questionOptionSchema = z.object({
+  id: z.number().optional(),
   content: z.string().min(1),
   is_correct: z.boolean().optional(),
   match_id: z.number().optional()
@@ -15,117 +17,98 @@ const questionOptionSchema = z.object({
 const createQuestionSchema = z.object({
   test_id: z.number(),
   card_id: z.number(),
-  type: z.enum(['multiple_choice', 'matching', 'fill_in_the_blank', 'true_false'] as [QuestionType, ...QuestionType[]]),
   content: z.string().min(1),
-  options: z.array(z.object({
-    content: z.string().min(1),
-    is_correct: z.boolean().optional(),
-    match_id: z.number().optional()
-  })).optional()
+  type: z.enum(['multiple_choice', 'true_false', 'fill_in_the_blank', 'matching']),
+  options: z.array(questionOptionSchema).optional()
 });
 
 const updateQuestionSchema = z.object({
-  test_id: z.number().optional(),
-  card_id: z.number().optional(),
-  type: z.enum(['multiple_choice', 'matching', 'fill_in_the_blank', 'true_false'] as [QuestionType, ...QuestionType[]]).optional(),
-  content: z.string().min(1).optional()
+  content: z.string().min(1).optional(),
+  type: z.enum(['multiple_choice', 'true_false', 'fill_in_the_blank', 'matching']).optional()
 });
 
-const updateOptionsSchema = z.array(z.object({
-  content: z.string().min(1),
-  is_correct: z.boolean().optional(),
-  match_id: z.number().optional()
-}));
+const updateOptionsSchema = z.array(questionOptionSchema);
 
-// Routes
+// Create a new question
 questionRoutes.post('/', zValidator('json', createQuestionSchema), async (c) => {
   const input = c.req.valid('json');
-  const question = await QuestionModel.create({
+  const data: CreateQuestionData = {
     test_id: input.test_id,
     card_id: input.card_id,
-    type: input.type,
     content: input.content,
-    options: input.options?.map(opt => ({
+    type: input.type,
+    options: input.options && input.options.map(opt => ({
       content: opt.content,
       is_correct: opt.is_correct,
       match_id: opt.match_id
     }))
-  });
+  };
+  const question = await questionModel.createQuestion(data);
   return c.json(question, 201);
 });
 
+// Get a question by ID
 questionRoutes.get('/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
-  const question = await QuestionModel.findById(id);
-
+  const testId = parseInt(c.req.query('test_id') || '0');
+  
+  const question = await questionModel.getQuestion(id, testId);
   if (!question) {
     return c.json({ error: 'Question not found' }, 404);
   }
-
-  // Get options if they exist
-  const options = await QuestionModel.getOptions(id);
-  return c.json({ ...question, options });
+  return c.json(question);
 });
 
-questionRoutes.get('/test/:testId', async (c) => {
-  const testId = parseInt(c.req.param('testId'));
-  const questions = await QuestionModel.findByTestId(testId);
-
-  // Get options for each question
-  const questionsWithOptions = await Promise.all(
-    questions.map(async (question) => {
-      const options = await QuestionModel.getOptions(question.id);
-      return { ...question, options };
-    })
-  );
-
-  return c.json(questionsWithOptions);
+// Get all questions for a test
+questionRoutes.get('/', async (c) => {
+  const testId = parseInt(c.req.query('test_id') || '0');
+  const questions = await questionModel.getTestQuestions(testId);
+  return c.json(questions);
 });
 
+// Update a question
 questionRoutes.patch('/:id', zValidator('json', updateQuestionSchema), async (c) => {
   const id = parseInt(c.req.param('id'));
-  const updates = c.req.valid('json');
-
-  // Check if question exists
-  const existingQuestion = await QuestionModel.findById(id);
-  if (!existingQuestion) {
+  const testId = parseInt(c.req.query('test_id') || '0');
+  const input = c.req.valid('json');
+  
+  const data: UpdateQuestionData = {
+    content: input.content,
+    type: input.type
+  };
+  
+  const question = await questionModel.updateQuestion(id, testId, data);
+  if (!question) {
     return c.json({ error: 'Question not found' }, 404);
   }
-
-  const updatedQuestion = await QuestionModel.update(id, updates);
-  return c.json(updatedQuestion);
+  return c.json(question);
 });
 
+// Update question options
 questionRoutes.patch('/:id/options', zValidator('json', updateOptionsSchema), async (c) => {
   const id = parseInt(c.req.param('id'));
-  const options = c.req.valid('json').map(opt => ({
+  const input = c.req.valid('json');
+  
+  const options = input.map(opt => ({
     content: opt.content,
     is_correct: opt.is_correct,
     match_id: opt.match_id
   }));
-
-  // Check if question exists
-  const existingQuestion = await QuestionModel.findById(id);
-  if (!existingQuestion) {
-    return c.json({ error: 'Question not found' }, 404);
-  }
-
-  // Update options
-  const updatedOptions = await QuestionModel.updateOptions(id, options);
+  
+  const updatedOptions = await questionModel.updateQuestionOptions(id, options);
   return c.json(updatedOptions);
 });
 
+// Delete a question
 questionRoutes.delete('/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
+  const testId = parseInt(c.req.query('test_id') || '0');
   
-  // Check if question exists
-  const existingQuestion = await QuestionModel.findById(id);
-  if (!existingQuestion) {
+  const question = await questionModel.deleteQuestion(id, testId);
+  if (!question) {
     return c.json({ error: 'Question not found' }, 404);
   }
-
-  await QuestionModel.delete(id);
-  return c.json({ success: true });
+  return c.json(question);
 });
 
-export { questionRoutes }; 
+export default questionRoutes; 

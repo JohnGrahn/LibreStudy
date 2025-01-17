@@ -41,4 +41,4 @@ authRoutes.post('/register', zValidator('json', registerSchema), async (c) => {
   return c.json(result, 201);
 });
 
-export { authRoutes }; 
+export default authRoutes; 

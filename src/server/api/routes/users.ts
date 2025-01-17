@@ -1,48 +1,52 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { UserModel } from '../../models/user';
+import userModel from '../../models/UserModel';
+import type { CreateUserData, UpdateUserData } from '../../models/UserModel';
 
 const userRoutes = new Hono();
 
 // Validation schemas
 const createUserSchema = z.object({
   username: z.string().min(3).max(255),
-  email: z.string().email().max(255),
-  password_hash: z.string().min(60).max(255) // bcrypt hash length
+  email: z.string().email(),
+  password: z.string().min(6)
 });
 
-const updateUserSchema = createUserSchema.partial();
+const updateUserSchema = z.object({
+  username: z.string().min(3).max(255).optional(),
+  email: z.string().email().optional(),
+  password: z.string().min(6).optional()
+});
 
 // Routes
 userRoutes.post('/', zValidator('json', createUserSchema), async (c) => {
   const input = c.req.valid('json');
-  
-  // Check if username or email already exists
-  const [existingUsername, existingEmail] = await Promise.all([
-    UserModel.findByUsername(input.username),
-    UserModel.findByEmail(input.email)
-  ]);
+  const data: CreateUserData = {
+    username: input.username,
+    email: input.email,
+    password: input.password
+  };
 
+  // Check if username is taken
+  const existingUsername = await userModel.findByUsername(data.username);
   if (existingUsername) {
     return c.json({ error: 'Username already taken' }, 400);
   }
 
+  // Check if email is taken
+  const existingEmail = await userModel.findByEmail(data.email);
   if (existingEmail) {
-    return c.json({ error: 'Email already registered' }, 400);
+    return c.json({ error: 'Email already taken' }, 400);
   }
 
-  const user = await UserModel.create({
-    username: input.username,
-    email: input.email,
-    password_hash: input.password_hash
-  });
+  const user = await userModel.createUser(data);
   return c.json(user, 201);
 });
 
 userRoutes.get('/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
-  const user = await UserModel.findById(id);
+  const user = await userModel.findById(id);
 
   if (!user) {
     return c.json({ error: 'User not found' }, 404);
@@ -53,44 +57,45 @@ userRoutes.get('/:id', async (c) => {
 
 userRoutes.patch('/:id', zValidator('json', updateUserSchema), async (c) => {
   const id = parseInt(c.req.param('id'));
-  const updates = c.req.valid('json');
+  const data = c.req.valid('json');
 
   // Check if user exists
-  const existingUser = await UserModel.findById(id);
+  const existingUser = await userModel.findById(id);
   if (!existingUser) {
     return c.json({ error: 'User not found' }, 404);
   }
 
-  // Check if username or email is being updated and if they're already taken
-  if (updates.username) {
-    const existingUsername = await UserModel.findByUsername(updates.username);
+  // Check if username is taken
+  if (data.username) {
+    const existingUsername = await userModel.findByUsername(data.username);
     if (existingUsername && existingUsername.id !== id) {
       return c.json({ error: 'Username already taken' }, 400);
     }
   }
 
-  if (updates.email) {
-    const existingEmail = await UserModel.findByEmail(updates.email);
+  // Check if email is taken
+  if (data.email) {
+    const existingEmail = await userModel.findByEmail(data.email);
     if (existingEmail && existingEmail.id !== id) {
-      return c.json({ error: 'Email already registered' }, 400);
+      return c.json({ error: 'Email already taken' }, 400);
     }
   }
 
-  const updatedUser = await UserModel.update(id, updates);
-  return c.json(updatedUser);
+  const user = await userModel.updateUser(id, data);
+  return c.json(user);
 });
 
 userRoutes.delete('/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
-  
+
   // Check if user exists
-  const existingUser = await UserModel.findById(id);
+  const existingUser = await userModel.findById(id);
   if (!existingUser) {
     return c.json({ error: 'User not found' }, 404);
   }
 
-  await UserModel.delete(id);
-  return c.json({ success: true });
+  await userModel.deleteUser(id);
+  return c.json({ message: 'User deleted successfully' });
 });
 
-export { userRoutes }; 
+export default userRoutes; 
