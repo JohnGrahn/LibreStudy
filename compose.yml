@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Containerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - VITE_API_URL=http://localhost:3001
+    depends_on:
+      - backend
+    userns_mode: "keep-id"
+
+  backend:
+    build:
+      context: .
+      dockerfile: Containerfile.backend
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://librestudy:librestudy@db:5432/librestudy
+    depends_on:
+      - db
+    userns_mode: "keep-id"
+
+  db:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=librestudy
+      - POSTGRES_PASSWORD=librestudy
+      - POSTGRES_DB=librestudy
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./src/server/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    userns_mode: "keep-id"
+
+volumes:
+  postgres_data: 
