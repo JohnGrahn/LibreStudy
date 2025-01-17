@@ -1,6 +1,6 @@
 import { Context, Next } from 'hono';
 import { verify } from 'hono/jwt';
-import { UserModel } from '../models/user';
+import userModel from '../models/UserModel';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
@@ -30,7 +30,7 @@ export async function authMiddleware(c: AuthHonoContext, next: Next) {
     }
     
     // Verify user still exists
-    const user = await UserModel.findById(payload.userId);
+    const user = await userModel.findOne({ id: payload.userId });
     if (!user) {
       return c.json({ error: 'User not found' }, 401);
     }
