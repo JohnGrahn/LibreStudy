@@ -24,6 +24,7 @@ WORKDIR /app
 # Copy built assets from builder stage
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package.json ./
+COPY --from=builder /app/src/server.ts ./src/
 
 # Install production dependencies only
 RUN bun install --production

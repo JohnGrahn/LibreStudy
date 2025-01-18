@@ -9,10 +9,9 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - VITE_API_URL=http://localhost:3001
+      - VITE_API_URL=http://backend:3001
     depends_on:
       - backend
-    userns_mode: "keep-id"
 
   backend:
     build:
@@ -25,7 +24,6 @@ services:
       - DATABASE_URL=postgresql://librestudy:librestudy@db:5432/librestudy
     depends_on:
       - db
-    userns_mode: "keep-id"
 
   db:
     image: postgres:16
@@ -37,8 +35,7 @@ services:
       - POSTGRES_DB=librestudy
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./src/server/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
-    userns_mode: "keep-id"
+      - ./src/server/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:Z
 
 volumes:
   postgres_data: 

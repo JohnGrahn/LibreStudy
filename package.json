@@ -9,7 +9,9 @@
     "dev": "bun run dev:backend & bun run dev:frontend",
     "build": "bunx --bun vite build",
     "preview": "bunx --bun vite preview",
-    "lint": "bunx --bun eslint ."
+    "lint": "bunx --bun eslint .",
+    "server": "bun src/server/index.ts",
+    "start": "bun src/server.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
