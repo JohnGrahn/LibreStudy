@@ -6,6 +6,7 @@ interface ApiOptions {
 
 async function api(endpoint: string, options: ApiOptions = {}) {
   const token = localStorage.getItem('token');
+  console.log('Token from localStorage:', token); // Debug log
   
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -15,6 +16,9 @@ async function api(endpoint: string, options: ApiOptions = {}) {
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
+
+  console.log('Request headers:', headers); // Debug log
+  console.log('Request URL:', `/api${endpoint}`); // Debug log
 
   const response = await fetch(`/api${endpoint}`, {
     method: options.method || 'GET',
@@ -27,6 +31,7 @@ async function api(endpoint: string, options: ApiOptions = {}) {
     if (response.status === 401 && 
         !endpoint.includes('/auth/login') && 
         !endpoint.includes('/auth/register')) {
+      console.log('Unauthorized response, current token:', token); // Debug log
       localStorage.removeItem('token');
       window.location.href = '/login';
       throw new Error('Please login to continue');

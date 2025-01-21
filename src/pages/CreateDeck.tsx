@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as Mantine from '@mantine/core';
 import { notifications } from '@mantine/notifications';
+import api from '../lib/api';
 
 export default function CreateDeck() {
   const navigate = useNavigate();
@@ -14,19 +15,14 @@ export default function CreateDeck() {
     setLoading(true);
 
     try {
-      const response = await fetch('/api/decks', {
+      const deck = await api('/decks', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+        body: { 
+          title, 
+          description 
         },
-        body: JSON.stringify({ title, description }),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to create deck');
-      }
-
-      const deck = await response.json();
       notifications.show({
         title: 'Success',
         message: 'Deck created successfully',
@@ -36,7 +32,7 @@ export default function CreateDeck() {
     } catch (error) {
       notifications.show({
         title: 'Error',
-        message: 'Failed to create deck',
+        message: error instanceof Error ? error.message : 'Failed to create deck',
         color: 'red',
       });
     } finally {

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import * as Mantine from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconPlus, IconEdit, IconTrash } from '../components/Icons';
+import api from '../lib/api';
 
 interface Card {
   id: number;
@@ -34,18 +35,9 @@ export default function DeckView() {
 
   const fetchDeckAndCards = async () => {
     try {
-      const [deckResponse, cardsResponse] = await Promise.all([
-        fetch(`/api/decks/${id}`),
-        fetch(`/api/decks/${id}/cards`)
-      ]);
-
-      if (!deckResponse.ok || !cardsResponse.ok) {
-        throw new Error('Failed to fetch deck data');
-      }
-
       const [deckData, cardsData] = await Promise.all([
-        deckResponse.json(),
-        cardsResponse.json()
+        api(`/decks/${id}`),
+        api(`/decks/${id}/cards`)
       ]);
 
       setDeck(deckData);
@@ -53,7 +45,7 @@ export default function DeckView() {
     } catch (error) {
       notifications.show({
         title: 'Error',
-        message: 'Failed to load deck data',
+        message: error instanceof Error ? error.message : 'Failed to load deck data',
         color: 'red'
       });
       navigate('/decks');
@@ -67,19 +59,10 @@ export default function DeckView() {
     const isEditing = !!editingCard;
 
     try {
-      const response = await fetch(`/api/decks/${id}/cards${isEditing ? `/${editingCard?.id}` : ''}`, {
-        method: isEditing ? 'PUT' : 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(cardData)
+      const savedCard = await api(`/decks/${id}/cards${isEditing ? `/${editingCard?.id}` : ''}`, {
+        method: isEditing ? 'PATCH' : 'POST',
+        body: cardData
       });
-
-      if (!response.ok) {
-        throw new Error(`Failed to ${isEditing ? 'update' : 'create'} card`);
-      }
-
-      const savedCard = await response.json();
 
       if (isEditing) {
         setCards(cards.map(card => card.id === savedCard.id ? savedCard : card));
@@ -97,7 +80,7 @@ export default function DeckView() {
     } catch (error) {
       notifications.show({
         title: 'Error',
-        message: `Failed to ${isEditing ? 'update' : 'create'} card`,
+        message: error instanceof Error ? error.message : `Failed to ${isEditing ? 'update' : 'create'} card`,
         color: 'red'
       });
     }
@@ -105,13 +88,9 @@ export default function DeckView() {
 
   const handleDeleteCard = async (cardId: number) => {
     try {
-      const response = await fetch(`/api/decks/${id}/cards/${cardId}`, {
+      await api(`/decks/${id}/cards/${cardId}`, {
         method: 'DELETE'
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete card');
-      }
 
       setCards(cards.filter(card => card.id !== cardId));
       notifications.show({
@@ -122,7 +101,7 @@ export default function DeckView() {
     } catch (error) {
       notifications.show({
         title: 'Error',
-        message: 'Failed to delete card',
+        message: error instanceof Error ? error.message : 'Failed to delete card',
         color: 'red'
       });
     }
@@ -163,8 +142,7 @@ export default function DeckView() {
             Add Card
           </Mantine.Button>
           <Mantine.Button
-            component="a"
-            href={`/decks/${id}/study`}
+            onClick={() => navigate(`/decks/${id}/study`)}
             variant="light"
           >
             Study Deck
@@ -250,7 +228,7 @@ export default function DeckView() {
             }}
           />
 
-          <Mantine.Group justify="flex-end" mt="md">
+          <Mantine.Group justify="flex-end">
             <Mantine.Button variant="light" onClick={handleCloseCardModal}>
               Cancel
             </Mantine.Button>

@@ -21,7 +21,7 @@ interface Deck {
   created_at: string;
 }
 
-export default function StudyMode() {
+export default function StudyDeck() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [deck, setDeck] = useState<Deck | null>(null);

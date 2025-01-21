@@ -13,14 +13,14 @@ export default abstract class BaseModel {
   protected abstract columns: string[];
 
   // Helper method to build WHERE clause
-  protected buildWhereClause(conditions: Record<string, any>): { text: string; values: any[] } {
+  protected buildWhereClause(conditions: Record<string, any>, startIndex: number = 1): { text: string; values: any[] } {
     const values: any[] = [];
     const clauses: string[] = [];
 
     Object.entries(conditions).forEach(([key, value], index) => {
       if (value !== undefined) {
         values.push(value);
-        clauses.push(`${key} = $${values.length}`);
+        clauses.push(`${key} = $${startIndex + values.length - 1}`);
       }
     });
 
@@ -31,14 +31,14 @@ export default abstract class BaseModel {
   }
 
   // Helper method to build SET clause for updates
-  protected buildSetClause(data: Record<string, any>): { text: string; values: any[] } {
+  protected buildSetClause(data: Record<string, any>, startIndex: number = 1): { text: string; values: any[] } {
     const values: any[] = [];
     const sets: string[] = [];
 
-    Object.entries(data).forEach(([key, value]) => {
+    Object.entries(data).forEach(([key, value], index) => {
       if (value !== undefined) {
         values.push(value);
-        sets.push(`${key} = $${values.length}`);
+        sets.push(`${key} = $${startIndex + values.length - 1}`);
       }
     });
 
@@ -90,8 +90,8 @@ export default abstract class BaseModel {
 
   // Update records by conditions
   async update(conditions: Record<string, any>, data: Record<string, any>, options: QueryOptions = {}): Promise<any[]> {
-    const where = this.buildWhereClause(conditions);
-    const set = this.buildSetClause(data);
+    const set = this.buildSetClause(data, 1);
+    const where = this.buildWhereClause(conditions, set.values.length + 1);
     const query = {
       text: `
         UPDATE ${this.tableName}
