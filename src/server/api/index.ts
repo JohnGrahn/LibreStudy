@@ -24,6 +24,9 @@ api.use('*', cors());
 api.onError(errorMiddleware);
 api.use('*', rateLimitMiddleware);
 
+// Health check endpoint
+api.get('/health', (c) => c.json({ status: 'ok' }));
+
 // Public routes
 api.route('/auth', authRoutes);
 

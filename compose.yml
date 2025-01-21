@@ -11,7 +11,14 @@ services:
       - NODE_ENV=production
       - VITE_API_URL=http://backend:3001
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   backend:
     build:
@@ -23,7 +30,14 @@ services:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://librestudy:librestudy@db:5432/librestudy
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   db:
     image: postgres:16
@@ -36,6 +50,12 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./src/server/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:Z
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U librestudy"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
   postgres_data: 
