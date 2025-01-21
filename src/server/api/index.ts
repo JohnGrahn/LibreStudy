@@ -13,6 +13,7 @@ import authRoutes from './routes/auth';
 import { authMiddleware, AuthHonoEnv } from '../middleware/auth';
 import { rateLimitMiddleware } from '../middleware/rateLimit';
 import { errorMiddleware } from '../middleware/error';
+import statsRoutes from './routes/stats';
 
 const api = new Hono<AuthHonoEnv>();
 
@@ -35,5 +36,6 @@ api.route('/tests', testRoutes);
 api.route('/questions', questionRoutes);
 api.route('/progress', progressRoutes);
 api.route('/import-export', importExportRoutes);
+api.route('/stats', statsRoutes);
 
 export default api; 

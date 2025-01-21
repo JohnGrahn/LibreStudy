@@ -1,5 +1,4 @@
 import BaseModel, { QueryOptions } from './BaseModel';
-import { createHash } from 'crypto';
 
 export interface User {
   id: number;
@@ -25,11 +24,6 @@ export class UserModel extends BaseModel {
   protected tableName = 'users';
   protected columns = ['id', 'username', 'email', 'password_hash', 'created_at'];
 
-  // Hash password using SHA-256
-  private hashPassword(password: string): string {
-    return createHash('sha256').update(password).digest('hex');
-  }
-
   // Find user by ID
   async findById(id: number): Promise<User | null> {
     const results = await this.find({ id });
@@ -53,10 +47,10 @@ export class UserModel extends BaseModel {
     const userData = {
       username: data.username,
       email: data.email,
-      password_hash: this.hashPassword(data.password)
+      password_hash: data.password  // Map password to password_hash for database
     };
-    const results = await this.create(userData);
-    return results[0];
+    const results = await super.create(userData);  // Use super.create to ensure proper inheritance
+    return results;  // BaseModel.create already returns a single row
   }
 
   // Update a user
@@ -64,7 +58,7 @@ export class UserModel extends BaseModel {
     const updateData: Record<string, any> = {};
     if (data.username) updateData.username = data.username;
     if (data.email) updateData.email = data.email;
-    if (data.password) updateData.password_hash = this.hashPassword(data.password);
+    if (data.password) updateData.password_hash = data.password;  // Password should be hashed by AuthService
     
     const results = await super.update({ id }, updateData);
     return results[0];

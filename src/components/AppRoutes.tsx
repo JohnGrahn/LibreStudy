@@ -1,6 +1,7 @@
-import { Routes, Route, Outlet } from 'react-router-dom';
+import { Routes, Route, Outlet, Navigate } from 'react-router-dom';
 import { Suspense, lazy } from 'react';
 import { LoadingOverlay } from '@mantine/core';
+import { useAuth } from '../contexts/AuthContext';
 
 // Lazy load all pages
 const Dashboard = lazy(() => import('../pages/Dashboard'));
@@ -10,20 +11,55 @@ const CreateDeck = lazy(() => import('../pages/CreateDeck'));
 const StudyMode = lazy(() => import('../pages/StudyMode'));
 const TestList = lazy(() => import('../pages/TestList'));
 const ProgressPage = lazy(() => import('../pages/Progress'));
+const Login = lazy(() => import('../pages/Login'));
+const Register = lazy(() => import('../pages/Register'));
+
+// Protected Route wrapper
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = useAuth();
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+}
 
 export function AppRoutes() {
   return (
     <Suspense fallback={<LoadingOverlay visible={true} />}>
       <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/decks" element={<Outlet />}>
+        {/* Public routes */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+
+        {/* Protected routes */}
+        <Route path="/" element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/decks" element={
+          <ProtectedRoute>
+            <Outlet />
+          </ProtectedRoute>
+        }>
           <Route index element={<DeckList />} />
           <Route path="new" element={<CreateDeck />} />
           <Route path=":id" element={<DeckView />} />
           <Route path=":id/study" element={<StudyMode />} />
         </Route>
-        <Route path="/tests/*" element={<TestList />} />
-        <Route path="/progress" element={<ProgressPage />} />
+
+        <Route path="/tests/*" element={
+          <ProtectedRoute>
+            <TestList />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/progress" element={
+          <ProtectedRoute>
+            <ProgressPage />
+          </ProtectedRoute>
+        } />
       </Routes>
     </Suspense>
   );

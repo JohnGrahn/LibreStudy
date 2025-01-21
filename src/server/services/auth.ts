@@ -6,7 +6,6 @@ import type { User } from '../models/UserModel';
 
 export class AuthService {
   private static readonly JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-  private static readonly SALT_ROUNDS = 10;
 
   /**
    * Hash a password using SHA-256
@@ -32,6 +31,22 @@ export class AuthService {
       username,
       exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24) // 24 hours
     }, this.JWT_SECRET);
+  }
+
+  /**
+   * Check if a username already exists
+   */
+  static async checkUsername(username: string): Promise<boolean> {
+    const user = await userModel.findByUsername(username);
+    return !!user;
+  }
+
+  /**
+   * Check if an email already exists
+   */
+  static async checkEmail(email: string): Promise<boolean> {
+    const user = await userModel.findByEmail(email);
+    return !!user;
   }
 
   /**
@@ -61,20 +76,17 @@ export class AuthService {
    * Register a new user
    */
   static async register(username: string, email: string, password: string): Promise<{ token: string; user: any } | null> {
-    // Check if username or email already exists
-    const existingUser = await userModel.findByUsername(username) || 
-                        await userModel.findByEmail(email);
-    if (existingUser) {
-      return null;
-    }
-
     // Hash password and create user
     const hashedPassword = await this.hashPassword(password);
     const user = await userModel.createUser({
       username,
       email,
-      password: hashedPassword
+      password: hashedPassword  // Changed back to password to match the CreateUserData interface
     });
+
+    if (!user) {
+      return null;
+    }
 
     // Generate token
     const token = await this.generateToken(user.id, user.username);

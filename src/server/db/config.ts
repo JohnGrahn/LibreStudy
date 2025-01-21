@@ -5,19 +5,37 @@ interface ExtendedPoolClient extends PoolClient {
   lastQuery?: any;
 }
 
+// Parse DATABASE_URL if available, otherwise use default config
+const parseDbUrl = (url: string) => {
+  const pattern = /^postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)$/;
+  const match = url.match(pattern);
+  if (!match) {
+    throw new Error('Invalid DATABASE_URL format');
+  }
+  const [, user, password, host, port, database] = match;
+  return { user, password, host, port: parseInt(port), database };
+};
+
 // Database configuration
-const config = {
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432'),
-  database: process.env.DB_NAME || 'librestudy',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD,
+const config = process.env.DATABASE_URL
+  ? parseDbUrl(process.env.DATABASE_URL)
+  : {
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT || '5432'),
+      database: process.env.DB_NAME || 'librestudy',
+      user: process.env.DB_USER || 'postgres',
+      password: process.env.DB_PASSWORD || 'librestudy',
+    };
+
+// Add connection pool settings
+const poolConfig = {
+  ...config,
   max: parseInt(process.env.DB_POOL_SIZE || '20'),
-  idleTimeoutMillis: 30000
+  idleTimeoutMillis: 30000,
 };
 
 // Create a new pool instance
-const pool = new Pool(config);
+const pool = new Pool(poolConfig);
 
 // The pool will emit an error on behalf of any idle clients
 pool.on('error', (err) => {

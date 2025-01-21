@@ -1,11 +1,17 @@
 import { NavLink } from '@mantine/core';
 import { Link, useLocation } from 'react-router-dom';
 import { IconDashboard, IconCards, IconNotes, IconChartBar } from './Icons';
-import { memo } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 
-export const AppNavbar = memo(function AppNavbar() {
+export function AppNavbar() {
   const location = useLocation();
+  const { isAuthenticated } = useAuth();
   const pathname = location.pathname;
+
+  // Don't show navbar on login/register pages
+  if (!isAuthenticated || ['/login', '/register'].includes(pathname)) {
+    return null;
+  }
 
   return (
     <nav>
@@ -39,4 +45,4 @@ export const AppNavbar = memo(function AppNavbar() {
       />
     </nav>
   );
-}); 
+} 
