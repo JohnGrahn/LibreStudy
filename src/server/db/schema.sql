@@ -28,9 +28,8 @@ CREATE TABLE cards (
     deck_id INTEGER REFERENCES decks(id) ON DELETE CASCADE,
     front TEXT NOT NULL,
     back TEXT NOT NULL,
-    interval INTEGER DEFAULT 0,
-    ease_factor FLOAT DEFAULT 2.5,
-    due_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    last_grade INTEGER DEFAULT 0,  -- 0=new, 1=again, 2=hard, 4=good, 5=easy
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -72,8 +71,22 @@ CREATE TABLE user_answers (
 
 -- Create indexes for better query performance
 CREATE INDEX idx_cards_deck_id ON cards(deck_id);
-CREATE INDEX idx_cards_due_date ON cards(due_date);
+CREATE INDEX idx_cards_updated_at ON cards(updated_at);
 CREATE INDEX idx_questions_test_id ON questions(test_id);
 CREATE INDEX idx_question_options_question_id ON question_options(question_id);
 CREATE INDEX idx_user_answers_user_id ON user_answers(user_id);
-CREATE INDEX idx_user_answers_question_id ON user_answers(question_id); 
+CREATE INDEX idx_user_answers_question_id ON user_answers(question_id);
+
+-- Create trigger to automatically update updated_at
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER update_cards_updated_at
+    BEFORE UPDATE ON cards
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column(); 

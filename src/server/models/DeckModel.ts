@@ -62,8 +62,8 @@ export class DeckModel extends BaseModel {
       text: `
         SELECT 
           COUNT(*) as total_cards,
-          COUNT(CASE WHEN due_date <= NOW() THEN 1 END) as due_cards,
-          COUNT(CASE WHEN interval >= 30 THEN 1 END) as mastered_cards
+          COUNT(CASE WHEN last_grade < 4 AND last_grade > 0 THEN 1 END) as due_cards,
+          COUNT(CASE WHEN last_grade >= 4 THEN 1 END) as mastered_cards
         FROM cards
         WHERE deck_id = $1
         AND deck_id IN (SELECT id FROM decks WHERE user_id = $2)

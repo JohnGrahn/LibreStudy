@@ -7,9 +7,8 @@ export interface Card {
   deck_id: number;
   front: string;
   back: string;
-  interval: number;
-  ease_factor: number;
-  due_date: Date;
+  last_grade: number;  // 0=new, 1=again, 2=hard, 4=good, 5=easy
+  updated_at: Date;
   created_at: Date;
 }
 
@@ -17,32 +16,34 @@ export interface CreateCardData {
   deck_id: number;
   front: string;
   back: string;
-  interval?: number;
-  ease_factor?: number;
-  due_date?: Date;
+  last_grade?: number;
 }
 
 export interface UpdateCardData {
   front?: string;
   back?: string;
-  interval?: number;
-  ease_factor?: number;
-  due_date?: Date;
-}
-
-export interface SpacedRepetitionData {
-  interval: number;
-  ease_factor: number;
-  due_date: Date;
+  last_grade?: number;
 }
 
 export class CardModel extends BaseModel {
   protected tableName = 'cards';
-  protected columns = ['id', 'deck_id', 'front', 'back', 'interval', 'ease_factor', 'due_date', 'created_at'];
+  protected columns = [
+    'id',
+    'deck_id',
+    'front',
+    'back',
+    'last_grade',
+    'updated_at',
+    'created_at'
+  ];
 
   // Create a new card
   async createCard(data: CreateCardData): Promise<Card> {
-    return this.create(data);
+    const cardData = {
+      ...data,
+      last_grade: data.last_grade || 0  // Default to 0 for new cards
+    };
+    return this.create(cardData);
   }
 
   // Update a card
@@ -61,39 +62,9 @@ export class CardModel extends BaseModel {
     return this.find({ deck_id: deckId }, options);
   }
 
-  // Get due cards in a deck
-  async getDueCards(deckId: number, limit?: number): Promise<Card[]> {
-    const query = {
-      text: `
-        SELECT * FROM ${this.tableName}
-        WHERE deck_id = $1
-        AND due_date <= NOW()
-        ORDER BY due_date ASC
-        ${limit ? 'LIMIT $2' : ''}
-      `,
-      values: [deckId, ...(limit ? [limit] : [])]
-    };
-
-    const result = await pool.query(query);
-    return result.rows;
-  }
-
   // Delete a card
   async deleteCard(id: number, deckId: number): Promise<Card | null> {
     const result = await this.delete({ id, deck_id: deckId });
-    return result[0] || null;
-  }
-
-  // Update spaced repetition data
-  async updateSpacedRepetition(id: number, deckId: number, data: SpacedRepetitionData): Promise<Card | null> {
-    const result = await this.update(
-      { id, deck_id: deckId },
-      {
-        interval: data.interval,
-        ease_factor: data.ease_factor,
-        due_date: data.due_date
-      }
-    );
     return result[0] || null;
   }
 
@@ -108,20 +79,18 @@ export class CardModel extends BaseModel {
         card.deck_id,
         card.front,
         card.back,
-        card.interval || 0,
-        card.ease_factor || 2.5,
-        card.due_date || new Date()
+        card.last_grade || 0
       );
       placeholders.push(
-        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5})`
+        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3})`
       );
-      paramIndex += 6;
+      paramIndex += 4;
     });
 
     const query = {
       text: `
         INSERT INTO ${this.tableName}
-        (deck_id, front, back, interval, ease_factor, due_date)
+        (deck_id, front, back, last_grade)
         VALUES ${placeholders.join(', ')}
         RETURNING *
       `,

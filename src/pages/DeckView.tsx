@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import * as Mantine from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconPlus, IconEdit, IconTrash } from '../components/Icons';
+import { IconPlus, IconEdit, IconTrash, IconChartLine, IconBook } from '../components/Icons';
 import api from '../lib/api';
 
 interface Card {
@@ -142,10 +142,20 @@ export default function DeckView() {
             Add Card
           </Mantine.Button>
           <Mantine.Button
-            onClick={() => navigate(`/decks/${id}/study`)}
+            component={Link}
+            to={`/decks/${id}/progress`}
             variant="light"
+            leftSection={<IconChartLine size={20} />}
           >
-            Study Deck
+            View Progress
+          </Mantine.Button>
+          <Mantine.Button
+            component={Link}
+            to={`/decks/${id}/study`}
+            color="blue"
+            leftSection={<IconBook size={20} />}
+          >
+            Study Now
           </Mantine.Button>
         </Mantine.Group>
       </Mantine.Group>

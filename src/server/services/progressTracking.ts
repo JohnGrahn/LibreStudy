@@ -8,8 +8,7 @@ export interface StudyStats {
   totalCards: number;
   masteredCards: number;
   cardsToReview: number;
-  averageEaseFactor: number;
-  averageInterval: number;
+  averageGrade: number;
 }
 
 export interface TestStats {
@@ -26,11 +25,24 @@ export interface TestStats {
 }
 
 export interface DeckProgress {
-  deckId: number;
   totalCards: number;
   masteredCards: number;
   dueCards: number;
   lastStudied: Date | null;
+  studyHistory: Array<{
+    date: Date;
+    cardsStudied: number;
+    performance: {
+      easy: number;
+      good: number;
+      hard: number;
+      again: number;
+    };
+  }>;
+  cardProgress: Array<{
+    cardId: number;
+    lastGrade: number;
+  }>;
 }
 
 export class ProgressTrackingService {
@@ -42,10 +54,9 @@ export class ProgressTrackingService {
       text: `
         SELECT 
           COUNT(*) as total_cards,
-          COUNT(CASE WHEN interval >= 30 THEN 1 END) as mastered_cards,
-          COUNT(CASE WHEN due_date <= NOW() THEN 1 END) as cards_to_review,
-          AVG(ease_factor) as avg_ease_factor,
-          AVG(interval) as avg_interval
+          COUNT(CASE WHEN last_grade >= 4 THEN 1 END) as mastered_cards,
+          COUNT(CASE WHEN last_grade < 4 AND last_grade > 0 THEN 1 END) as cards_to_review,
+          AVG(last_grade) as avg_grade
         FROM cards c
         JOIN decks d ON c.deck_id = d.id
         WHERE d.user_id = $1
@@ -60,8 +71,7 @@ export class ProgressTrackingService {
       totalCards: parseInt(stats.total_cards),
       masteredCards: parseInt(stats.mastered_cards),
       cardsToReview: parseInt(stats.cards_to_review),
-      averageEaseFactor: parseFloat(stats.avg_ease_factor) || 2.5,
-      averageInterval: parseFloat(stats.avg_interval) || 0
+      averageGrade: parseFloat(stats.avg_grade) || 0
     };
   }
 
@@ -117,64 +127,62 @@ export class ProgressTrackingService {
   }
 
   /**
-   * Get progress for all decks of a user
-   */
-  static async getDeckProgress(userId: number): Promise<DeckProgress[]> {
-    const query = {
-      text: `
-        SELECT 
-          d.id as deck_id,
-          COUNT(c.*) as total_cards,
-          COUNT(CASE WHEN c.interval >= 30 THEN 1 END) as mastered_cards,
-          COUNT(CASE WHEN c.due_date <= NOW() THEN 1 END) as due_cards,
-          MAX(c.due_date) as last_studied
-        FROM decks d
-        LEFT JOIN cards c ON c.deck_id = d.id
-        WHERE d.user_id = $1
-        GROUP BY d.id
-      `,
-      values: [userId]
-    };
-
-    const result = await pool.query(query);
-    
-    return result.rows.map(row => ({
-      deckId: row.deck_id,
-      totalCards: parseInt(row.total_cards),
-      masteredCards: parseInt(row.mastered_cards),
-      dueCards: parseInt(row.due_cards),
-      lastStudied: row.last_studied
-    }));
-  }
-
-  /**
    * Get detailed progress for a specific deck
    */
-  static async getDeckDetailedProgress(deckId: number, userId: number): Promise<{
-    studyHistory: { date: Date; cardsStudied: number }[];
-    cardProgress: { cardId: number; interval: number; easeFactor: number }[];
-  }> {
+  static async getDeckDetailedProgress(deckId: number, userId: number): Promise<DeckProgress> {
+    // Get basic deck stats and mastery based on recent performance
+    const statsQuery = {
+      text: `
+        WITH card_grades AS (
+          SELECT 
+            c.id,
+            CASE 
+              WHEN c.last_grade >= 4 THEN true  -- Easy/Good responses
+              ELSE false
+            END as is_mastered,
+            c.updated_at as last_studied,
+            c.last_grade
+          FROM cards c
+          WHERE c.deck_id = $1
+          AND c.deck_id IN (SELECT id FROM decks WHERE user_id = $2)
+        )
+        SELECT 
+          COUNT(*) as total_cards,
+          COUNT(CASE WHEN is_mastered THEN 1 END) as mastered_cards,
+          COUNT(CASE WHEN last_grade < 4 AND last_grade > 0 THEN 1 END) as due_cards,
+          MAX(last_studied) as last_studied
+        FROM card_grades
+      `,
+      values: [deckId, userId]
+    };
+
+    // Get study history with performance breakdown
     const historyQuery = {
       text: `
         SELECT 
-          DATE(due_date) as study_date,
-          COUNT(*) as cards_studied
+          DATE(updated_at) as study_date,
+          COUNT(*) as cards_studied,
+          COUNT(CASE WHEN last_grade = 5 THEN 1 END) as easy_count,
+          COUNT(CASE WHEN last_grade = 4 THEN 1 END) as good_count,
+          COUNT(CASE WHEN last_grade = 2 THEN 1 END) as hard_count,
+          COUNT(CASE WHEN last_grade = 1 THEN 1 END) as again_count
         FROM cards
         WHERE deck_id = $1
         AND deck_id IN (SELECT id FROM decks WHERE user_id = $2)
-        GROUP BY DATE(due_date)
+        AND updated_at IS NOT NULL
+        GROUP BY DATE(updated_at)
         ORDER BY study_date DESC
         LIMIT 30
       `,
       values: [deckId, userId]
     };
 
+    // Get card progress including last grade
     const progressQuery = {
       text: `
         SELECT 
           id as card_id,
-          interval,
-          ease_factor
+          last_grade
         FROM cards
         WHERE deck_id = $1
         AND deck_id IN (SELECT id FROM decks WHERE user_id = $2)
@@ -182,20 +190,32 @@ export class ProgressTrackingService {
       values: [deckId, userId]
     };
 
-    const [historyResult, progressResult] = await Promise.all([
+    const [statsResult, historyResult, progressResult] = await Promise.all([
+      pool.query(statsQuery),
       pool.query(historyQuery),
       pool.query(progressQuery)
     ]);
 
+    const stats = statsResult.rows[0];
+
     return {
+      totalCards: parseInt(stats.total_cards) || 0,
+      masteredCards: parseInt(stats.mastered_cards) || 0,
+      dueCards: parseInt(stats.due_cards) || 0,
+      lastStudied: stats.last_studied,
       studyHistory: historyResult.rows.map(row => ({
         date: row.study_date,
-        cardsStudied: parseInt(row.cards_studied)
+        cardsStudied: parseInt(row.cards_studied),
+        performance: {
+          easy: parseInt(row.easy_count) || 0,
+          good: parseInt(row.good_count) || 0,
+          hard: parseInt(row.hard_count) || 0,
+          again: parseInt(row.again_count) || 0
+        }
       })),
       cardProgress: progressResult.rows.map(row => ({
         cardId: row.card_id,
-        interval: parseInt(row.interval),
-        easeFactor: parseFloat(row.ease_factor)
+        lastGrade: parseInt(row.last_grade) || 0
       }))
     };
   }

@@ -13,6 +13,7 @@ const TestList = lazy(() => import('../pages/TestList'));
 const ProgressPage = lazy(() => import('../pages/Progress'));
 const Login = lazy(() => import('../pages/Login'));
 const Register = lazy(() => import('../pages/Register'));
+const DeckProgress = lazy(() => import('../pages/DeckProgress'));
 
 // Protected Route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -47,6 +48,7 @@ export function AppRoutes() {
           <Route path="new" element={<CreateDeck />} />
           <Route path=":id" element={<DeckView />} />
           <Route path=":id/study" element={<StudyMode />} />
+          <Route path=":id/progress" element={<DeckProgress />} />
         </Route>
 
         <Route path="/tests/*" element={

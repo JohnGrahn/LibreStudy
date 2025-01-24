@@ -7,6 +7,8 @@ import {
   IconNotes,
   IconChartBar,
   IconSearch,
+  IconChartLine,
+  IconBook,
 } from '@tabler/icons-react';
 
 export {
@@ -18,4 +20,6 @@ export {
   IconNotes,
   IconChartBar,
   IconSearch,
+  IconChartLine,
+  IconBook,
 };

@@ -23,17 +23,13 @@ const updateDeckSchema = z.object({
 const createCardSchema = z.object({
   front: z.string(),
   back: z.string(),
-  interval: z.number().optional(),
-  ease_factor: z.number().optional(),
-  due_date: z.string().optional()
+  last_grade: z.number().optional()
 });
 
 const updateCardSchema = z.object({
   front: z.string().optional(),
   back: z.string().optional(),
-  interval: z.number().optional(),
-  ease_factor: z.number().optional(),
-  due_date: z.string().optional()
+  last_grade: z.number().optional()
 });
 
 // Create a new deck
@@ -154,9 +150,7 @@ deckRoutes.post('/:id/cards', zValidator('json', createCardSchema), async (c) =>
     deck_id: deckId,
     front: input.front,
     back: input.back,
-    interval: input.interval,
-    ease_factor: input.ease_factor,
-    due_date: input.due_date ? new Date(input.due_date) : undefined
+    last_grade: input.last_grade
   };
 
   const card = await cardModel.createCard(data);
@@ -179,24 +173,10 @@ deckRoutes.patch('/:id/cards/:cardId', zValidator('json', updateCardSchema), asy
   }
 
   const input = c.req.valid('json');
-  
-  // If this is a spaced repetition update (has interval, ease_factor, and due_date)
-  if (input.interval !== undefined && input.ease_factor !== undefined && input.due_date !== undefined) {
-    const card = await cardModel.updateSpacedRepetition(cardId, deckId, {
-      interval: input.interval,
-      ease_factor: input.ease_factor,
-      due_date: new Date(input.due_date)
-    });
-    if (!card) {
-      return c.json({ error: 'Card not found' }, 404);
-    }
-    return c.json(card);
-  }
-
-  // Otherwise, handle it as a regular card update
   const data = {
     front: input.front,
-    back: input.back
+    back: input.back,
+    last_grade: input.last_grade
   };
 
   const card = await cardModel.updateCard(cardId, deckId, data);

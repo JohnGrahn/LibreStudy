@@ -8,17 +8,26 @@ interface Card {
   id: number;
   front: string;
   back: string;
-  interval: number;
-  ease_factor: number;
-  due_date: string;
-  created_at: string;
+  last_grade: number;
 }
 
 interface Deck {
   id: number;
   title: string;
   description: string;
-  created_at: string;
+}
+
+interface SessionStats {
+  startTime: Date;
+  cardsReviewed: number;
+  correctStreak: number;
+  longestStreak: number;
+  performance: {
+    easy: number;
+    good: number;
+    hard: number;
+    again: number;
+  }
 }
 
 export default function StudyMode() {
@@ -29,6 +38,18 @@ export default function StudyMode() {
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [sessionStats, setSessionStats] = useState<SessionStats>({
+    startTime: new Date(),
+    cardsReviewed: 0,
+    correctStreak: 0,
+    longestStreak: 0,
+    performance: {
+      easy: 0,
+      good: 0,
+      hard: 0,
+      again: 0
+    }
+  });
 
   useEffect(() => {
     fetchDeckAndCards();
@@ -42,7 +63,8 @@ export default function StudyMode() {
       ]);
 
       setDeck(deckData);
-      setCards(cardsData);
+      // Shuffle the cards
+      setCards(shuffleArray(cardsData));
     } catch (error) {
       notifications.show({
         title: 'Error',
@@ -55,21 +77,49 @@ export default function StudyMode() {
     }
   };
 
+  // Fisher-Yates shuffle algorithm
+  const shuffleArray = <T,>(array: T[]): T[] => {
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  };
+
   const handleAnswer = async (quality: number) => {
     const card = cards[currentCardIndex];
     if (!card) return;
 
     try {
-      const updatedCard = await api(`/decks/${id}/cards/${card.id}`, {
+      // Update the card's last grade
+      await api(`/decks/${id}/cards/${card.id}`, {
         method: 'PATCH',
         body: {
-          interval: calculateInterval(card.interval, card.ease_factor, quality),
-          ease_factor: calculateEaseFactor(card.ease_factor, quality),
-          due_date: calculateDueDate(card.interval, quality)
+          last_grade: quality
         }
       });
 
-      setCards(cards.map(c => c.id === updatedCard.id ? updatedCard : c));
+      // Update session stats
+      setSessionStats(prev => {
+        const newStats = { ...prev };
+        newStats.cardsReviewed++;
+        
+        if (quality === 5) newStats.performance.easy++;
+        else if (quality === 4) newStats.performance.good++;
+        else if (quality === 2) newStats.performance.hard++;
+        else if (quality === 1) newStats.performance.again++;
+
+        if (quality >= 4) {
+          newStats.correctStreak++;
+          newStats.longestStreak = Math.max(newStats.longestStreak, newStats.correctStreak);
+        } else {
+          newStats.correctStreak = 0;
+        }
+
+        return newStats;
+      });
+
       nextCard();
     } catch (error) {
       notifications.show({
@@ -80,37 +130,26 @@ export default function StudyMode() {
     }
   };
 
-  const calculateInterval = (currentInterval: number, easeFactor: number, quality: number) => {
-    if (quality < 3) return 1;
-    if (currentInterval === 0) return 1;
-    if (currentInterval === 1) return 6;
-    return Math.round(currentInterval * easeFactor);
-  };
-
-  const calculateEaseFactor = (currentEaseFactor: number, quality: number) => {
-    const newEaseFactor = currentEaseFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
-    return Math.max(1.3, newEaseFactor);
-  };
-
-  const calculateDueDate = (interval: number, quality: number) => {
-    const date = new Date();
-    if (quality < 3) {
-      date.setMinutes(date.getMinutes() + 10);
-    } else {
-      date.setDate(date.getDate() + interval);
-    }
-    return date.toISOString();
-  };
-
   const nextCard = () => {
     if (currentCardIndex < cards.length - 1) {
       setCurrentCardIndex(currentCardIndex + 1);
       setShowAnswer(false);
     } else {
+      const sessionDuration = Math.round((new Date().getTime() - sessionStats.startTime.getTime()) / 1000 / 60);
       notifications.show({
-        title: 'Congratulations!',
-        message: 'You have completed studying this deck!',
-        color: 'green'
+        title: 'Study Session Complete!',
+        message: `
+          Time: ${sessionDuration} minutes
+          Cards Reviewed: ${sessionStats.cardsReviewed}
+          Longest Streak: ${sessionStats.longestStreak}
+          Performance:
+          - Easy: ${sessionStats.performance.easy}
+          - Good: ${sessionStats.performance.good}
+          - Hard: ${sessionStats.performance.hard}
+          - Again: ${sessionStats.performance.again}
+        `,
+        color: 'green',
+        autoClose: false
       });
       navigate(`/decks/${id}`);
     }
@@ -150,7 +189,12 @@ export default function StudyMode() {
       <Mantine.Paper p="xl" withBorder>
         <Mantine.Group justify="space-between" mb="xl">
           <Mantine.Title order={2}>{deck.title}</Mantine.Title>
-          <Mantine.Text>Card {currentCardIndex + 1} of {cards.length}</Mantine.Text>
+          <Mantine.Group>
+            <Mantine.Text>Card {currentCardIndex + 1} of {cards.length}</Mantine.Text>
+            <Mantine.Badge color={sessionStats.correctStreak > 0 ? "green" : "gray"}>
+              Streak: {sessionStats.correctStreak}
+            </Mantine.Badge>
+          </Mantine.Group>
         </Mantine.Group>
 
         <Mantine.Box
@@ -218,25 +262,25 @@ export default function StudyMode() {
                 color="red"
                 onClick={() => handleAnswer(1)}
               >
-                Again
+                Again ({sessionStats.performance.again})
               </Mantine.Button>
               <Mantine.Button
                 color="orange"
                 onClick={() => handleAnswer(2)}
               >
-                Hard
+                Hard ({sessionStats.performance.hard})
               </Mantine.Button>
               <Mantine.Button
                 color="blue"
                 onClick={() => handleAnswer(4)}
               >
-                Good
+                Good ({sessionStats.performance.good})
               </Mantine.Button>
               <Mantine.Button
                 color="green"
                 onClick={() => handleAnswer(5)}
               >
-                Easy
+                Easy ({sessionStats.performance.easy})
               </Mantine.Button>
             </Mantine.Group>
           </Mantine.Stack>
