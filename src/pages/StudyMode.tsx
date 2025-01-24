@@ -153,23 +153,64 @@ export default function StudyMode() {
           <Mantine.Text>Card {currentCardIndex + 1} of {cards.length}</Mantine.Text>
         </Mantine.Group>
 
-        <Mantine.Card shadow="sm" padding="lg" radius="md" withBorder mb="xl">
-          <Mantine.Text fw={500} size="lg" mb="md">
-            {showAnswer ? 'Answer:' : 'Question:'}
-          </Mantine.Text>
-          <Mantine.Text size="md">
-            {showAnswer ? currentCard.back : currentCard.front}
-          </Mantine.Text>
-        </Mantine.Card>
-
-        {!showAnswer ? (
-          <Mantine.Button
-            fullWidth
-            onClick={() => setShowAnswer(true)}
+        <Mantine.Box
+          onClick={() => setShowAnswer(!showAnswer)}
+          style={{ cursor: 'pointer', position: 'relative', minHeight: '200px' }}
+        >
+          <Mantine.Transition
+            mounted={!showAnswer}
+            transition={{
+              in: { transform: 'rotateY(0deg)', opacity: 1 },
+              out: { transform: 'rotateY(90deg)', opacity: 0 },
+              common: { transformStyle: 'preserve-3d' },
+              transitionProperty: 'transform, opacity'
+            }}
+            duration={600}
+            timingFunction="ease"
           >
-            Show Answer
-          </Mantine.Button>
-        ) : (
+            {(styles) => (
+              <Mantine.Card
+                shadow="sm"
+                padding="lg"
+                radius="md"
+                withBorder
+                mb="xl"
+                style={{ ...styles, position: 'absolute', width: '100%' }}
+              >
+                <Mantine.Text fw={500} size="lg" mb="md">Question:</Mantine.Text>
+                <Mantine.Text size="md">{currentCard.front}</Mantine.Text>
+              </Mantine.Card>
+            )}
+          </Mantine.Transition>
+
+          <Mantine.Transition
+            mounted={showAnswer}
+            transition={{
+              in: { transform: 'rotateY(0deg)', opacity: 1 },
+              out: { transform: 'rotateY(-90deg)', opacity: 0 },
+              common: { transformStyle: 'preserve-3d' },
+              transitionProperty: 'transform, opacity'
+            }}
+            duration={600}
+            timingFunction="ease"
+          >
+            {(styles) => (
+              <Mantine.Card
+                shadow="sm"
+                padding="lg"
+                radius="md"
+                withBorder
+                mb="xl"
+                style={{ ...styles, position: 'absolute', width: '100%' }}
+              >
+                <Mantine.Text fw={500} size="lg" mb="md">Answer:</Mantine.Text>
+                <Mantine.Text size="md">{currentCard.back}</Mantine.Text>
+              </Mantine.Card>
+            )}
+          </Mantine.Transition>
+        </Mantine.Box>
+
+        {showAnswer && (
           <Mantine.Stack>
             <Mantine.Text fw={500} ta="center">How well did you know this?</Mantine.Text>
             <Mantine.Group justify="center">
