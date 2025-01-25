@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 
 interface AuthContextType {
   isAuthenticated: boolean;
+  isLoading: boolean;
   token: string | null;
   login: (token: string) => void;
   logout: () => void;
@@ -12,16 +13,18 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
-  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
-  const [isAuthenticated, setIsAuthenticated] = useState(!!token);
+  const [token, setToken] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check token validity on mount
     const storedToken = localStorage.getItem('token');
     if (storedToken) {
+      // Add token validation API call here if needed
       setToken(storedToken);
       setIsAuthenticated(true);
     }
+    setIsLoading(false);
   }, []);
 
   const login = (newToken: string) => {
@@ -38,8 +41,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, token, login, logout }}>
-      {children}
+    <AuthContext.Provider value={{ isAuthenticated, isLoading, token, login, logout }}>
+      {!isLoading && children}
     </AuthContext.Provider>
   );
 }

@@ -17,7 +17,12 @@ const DeckProgress = lazy(() => import('../pages/DeckProgress'));
 
 // Protected Route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
+  
+  if (isLoading) {
+    return <LoadingOverlay visible={true} />;
+  }
+
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
