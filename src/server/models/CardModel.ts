@@ -57,9 +57,23 @@ export class CardModel extends BaseModel {
     return this.findOne({ id, deck_id: deckId });
   }
 
-  // Get all cards in a deck
-  async getDeckCards(deckId: number, options: { orderBy?: string; limit?: number; offset?: number } = {}): Promise<Card[]> {
-    return this.find({ deck_id: deckId }, options);
+  // Get all cards in a deck with user progress
+  async getDeckCards(deckId: number, userId?: number): Promise<Card[]> {
+    const query = {
+      text: `
+        SELECT 
+          c.*,
+          COALESCE(ucp.last_grade, c.last_grade) as last_grade
+        FROM ${this.tableName} c
+        LEFT JOIN user_card_progress ucp ON c.id = ucp.card_id AND ucp.user_id = $2
+        WHERE c.deck_id = $1
+        ORDER BY c.created_at ASC
+      `,
+      values: [deckId, userId || null]
+    };
+
+    const result = await pool.query(query);
+    return result.rows;
   }
 
   // Delete a card

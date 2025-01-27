@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import deckModel from '../../models/DeckModel';
 import cardModel from '../../models/CardModel';
+import userCardProgressModel from '../../models/UserCardProgressModel';
 import type { CreateDeckData, UpdateDeckData } from '../../models/DeckModel';
 import type { CreateCardData } from '../../models/CardModel';
 import type { AuthHonoEnv } from '../../middleware/auth';
@@ -138,7 +139,7 @@ deckRoutes.get('/:id/cards', async (c) => {
     return c.json({ error: 'Deck not found' }, 404);
   }
 
-  const cards = await cardModel.getDeckCards(deckId);
+  const cards = await cardModel.getDeckCards(deckId, user.id);
   return c.json(cards);
 });
 
@@ -177,17 +178,27 @@ deckRoutes.patch('/:id/cards/:cardId', zValidator('json', updateCardSchema), asy
     return c.json({ error: 'Unauthorized' }, 401);
   }
 
-  // Check if user owns the deck
+  const input = c.req.valid('json');
   const deck = await deckModel.getDeck(deckId, user.id);
-  if (!deck || deck.user_id !== user.id) {
-    return c.json({ error: 'Unauthorized: You can only modify cards in your own decks' }, 403);
+  
+  if (!deck) {
+    return c.json({ error: 'Deck not found' }, 404);
   }
 
-  const input = c.req.valid('json');
+  // If updating last_grade, use user_card_progress instead of modifying the original card
+  if (input.last_grade !== undefined) {
+    const progress = await userCardProgressModel.updateProgress(user.id, cardId, input.last_grade);
+    return c.json(progress);
+  }
+
+  // For other card updates (front/back), require deck ownership
+  if (deck.user_id !== user.id) {
+    return c.json({ error: 'Unauthorized: You can only modify card content in your own decks' }, 403);
+  }
+
   const data = {
     front: input.front,
-    back: input.back,
-    last_grade: input.last_grade
+    back: input.back
   };
 
   const card = await cardModel.updateCard(cardId, deckId, data);
@@ -217,6 +228,23 @@ deckRoutes.delete('/:id/cards/:cardId', async (c) => {
     return c.json({ error: 'Card not found' }, 404);
   }
   return c.json(card);
+});
+
+// Get user's progress on all cards in a deck
+deckRoutes.get('/:id/progress', async (c) => {
+  const deckId = parseInt(c.req.param('id'));
+  const user = c.get('user');
+  if (!user) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const deck = await deckModel.getDeck(deckId, user.id);
+  if (!deck) {
+    return c.json({ error: 'Deck not found' }, 404);
+  }
+
+  const progress = await userCardProgressModel.getDeckProgress(user.id, deckId);
+  return c.json(progress);
 });
 
 export default deckRoutes; 

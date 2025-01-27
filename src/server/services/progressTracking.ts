@@ -130,28 +130,24 @@ export class ProgressTrackingService {
    * Get detailed progress for a specific deck
    */
   static async getDeckDetailedProgress(deckId: number, userId: number): Promise<DeckProgress> {
-    // Get basic deck stats and mastery based on recent performance
+    // Get basic deck stats and mastery based on user progress
     const statsQuery = {
       text: `
-        WITH card_grades AS (
+        WITH card_progress AS (
           SELECT 
             c.id,
-            CASE 
-              WHEN c.last_grade >= 4 THEN true  -- Easy/Good responses
-              ELSE false
-            END as is_mastered,
-            c.updated_at as last_studied,
-            c.last_grade
+            COALESCE(ucp.last_grade, 0) as last_grade,
+            COALESCE(ucp.updated_at, c.created_at) as last_studied
           FROM cards c
+          LEFT JOIN user_card_progress ucp ON c.id = ucp.card_id AND ucp.user_id = $2
           WHERE c.deck_id = $1
-          AND c.deck_id IN (SELECT id FROM decks WHERE user_id = $2)
         )
         SELECT 
           COUNT(*) as total_cards,
-          COUNT(CASE WHEN is_mastered THEN 1 END) as mastered_cards,
+          COUNT(CASE WHEN last_grade >= 4 THEN 1 END) as mastered_cards,
           COUNT(CASE WHEN last_grade < 4 AND last_grade > 0 THEN 1 END) as due_cards,
           MAX(last_studied) as last_studied
-        FROM card_grades
+        FROM card_progress
       `,
       values: [deckId, userId]
     };
@@ -160,17 +156,17 @@ export class ProgressTrackingService {
     const historyQuery = {
       text: `
         SELECT 
-          DATE(updated_at) as study_date,
+          DATE(ucp.updated_at) as study_date,
           COUNT(*) as cards_studied,
-          COUNT(CASE WHEN last_grade = 5 THEN 1 END) as easy_count,
-          COUNT(CASE WHEN last_grade = 4 THEN 1 END) as good_count,
-          COUNT(CASE WHEN last_grade = 2 THEN 1 END) as hard_count,
-          COUNT(CASE WHEN last_grade = 1 THEN 1 END) as again_count
-        FROM cards
-        WHERE deck_id = $1
-        AND deck_id IN (SELECT id FROM decks WHERE user_id = $2)
-        AND updated_at IS NOT NULL
-        GROUP BY DATE(updated_at)
+          COUNT(CASE WHEN ucp.last_grade = 5 THEN 1 END) as easy_count,
+          COUNT(CASE WHEN ucp.last_grade = 4 THEN 1 END) as good_count,
+          COUNT(CASE WHEN ucp.last_grade = 2 THEN 1 END) as hard_count,
+          COUNT(CASE WHEN ucp.last_grade = 1 THEN 1 END) as again_count
+        FROM user_card_progress ucp
+        JOIN cards c ON c.id = ucp.card_id
+        WHERE c.deck_id = $1 AND ucp.user_id = $2
+        AND ucp.updated_at IS NOT NULL
+        GROUP BY DATE(ucp.updated_at)
         ORDER BY study_date DESC
         LIMIT 30
       `,
@@ -181,11 +177,12 @@ export class ProgressTrackingService {
     const progressQuery = {
       text: `
         SELECT 
-          id as card_id,
-          last_grade
-        FROM cards
-        WHERE deck_id = $1
-        AND deck_id IN (SELECT id FROM decks WHERE user_id = $2)
+          c.id as card_id,
+          COALESCE(ucp.last_grade, 0) as last_grade
+        FROM cards c
+        LEFT JOIN user_card_progress ucp ON c.id = ucp.card_id AND ucp.user_id = $2
+        WHERE c.deck_id = $1
+        ORDER BY c.created_at ASC
       `,
       values: [deckId, userId]
     };
