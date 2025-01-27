@@ -25,3 +25,4 @@ dist-ssr
 .cursorrules
 
 package-lock.json
+.env

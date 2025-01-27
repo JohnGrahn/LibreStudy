@@ -26,9 +26,20 @@ services:
       dockerfile: Containerfile.backend
     ports:
       - "3001:3001"
+    env_file: .env
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://librestudy:librestudy@db:5432/librestudy
+      - PORT=3001
+    command: >
+      sh -c "
+        echo 'Waiting for database to be ready...'
+        while ! nc -z db 5432; do
+          sleep 1
+        done
+        echo 'Database is ready!'
+        bun run src/server/db/seed.ts && bun run start:backend
+      "
     depends_on:
       db:
         condition: service_healthy

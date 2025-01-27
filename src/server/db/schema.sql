@@ -20,6 +20,7 @@ CREATE TABLE decks (
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
     description TEXT,
+    is_public BOOLEAN DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -76,6 +77,7 @@ CREATE INDEX idx_questions_test_id ON questions(test_id);
 CREATE INDEX idx_question_options_question_id ON question_options(question_id);
 CREATE INDEX idx_user_answers_user_id ON user_answers(user_id);
 CREATE INDEX idx_user_answers_question_id ON user_answers(question_id);
+CREATE INDEX idx_decks_is_public ON decks(is_public);
 
 -- Create trigger to automatically update updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()

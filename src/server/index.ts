@@ -9,7 +9,7 @@ const app = new Hono();
 
 // Configure CORS
 app.use('*', cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000'], // Vite dev server
+  origin: ['http://localhost:3000'],
   credentials: true,
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
@@ -20,11 +20,14 @@ app.use('*', cors({
 app.use('*', logger());
 app.use('*', prettyJSON());
 
+// Add health check endpoint
+app.get('/health', (c) => c.json({ status: 'ok' }));
+
 // Mount API routes under /api
 app.route('/api', api);
 
 const port = parseInt(process.env.PORT || '3001');
-console.log(`Server starting on port ${port}...`);
+console.log(`Started server: http://localhost:${port}`);
 
 export default {
   port,

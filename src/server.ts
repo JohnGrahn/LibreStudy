@@ -14,25 +14,43 @@ app.use('/*', serveStatic({ root: './dist' }));
 
 // Proxy API requests to backend
 app.all('/api/*', async (c) => {
-  const backendUrl = process.env.VITE_API_URL || 'http://backend:3001';
-  const url = new URL(c.req.url);
-  const targetUrl = backendUrl + url.pathname + url.search;
+  try {
+    const backendUrl = process.env.VITE_API_URL || 'http://backend:3001';
+    const url = new URL(c.req.url);
+    const targetUrl = backendUrl + url.pathname + url.search;
 
-  const headers = new Headers();
-  for (const [key, value] of c.req.raw.headers.entries()) {
-    headers.set(key, value);
+    console.log(`Proxying request to: ${targetUrl}`);
+
+    const headers = new Headers();
+    for (const [key, value] of c.req.raw.headers.entries()) {
+      if (key !== 'host') { // Skip the host header
+        headers.set(key, value);
+      }
+    }
+
+    const response = await fetch(targetUrl, {
+      method: c.req.method,
+      headers,
+      body: c.req.method !== 'GET' && c.req.method !== 'HEAD' ? await c.req.raw.blob() : undefined
+    });
+
+    // Forward the response headers
+    const responseHeaders = new Headers();
+    for (const [key, value] of response.headers.entries()) {
+      responseHeaders.set(key, value);
+    }
+
+    return new Response(response.body, {
+      status: response.status,
+      headers: responseHeaders
+    });
+  } catch (error) {
+    console.error('Proxy error:', error);
+    return new Response(JSON.stringify({ error: 'Backend service unavailable' }), {
+      status: 502,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
-
-  const response = await fetch(targetUrl, {
-    method: c.req.method,
-    headers,
-    body: c.req.method !== 'GET' && c.req.method !== 'HEAD' ? await c.req.raw.blob() : undefined
-  });
-
-  return new Response(response.body, {
-    status: response.status,
-    headers: response.headers
-  });
 });
 
 // Serve index.html for all other routes (SPA support)

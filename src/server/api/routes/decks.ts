@@ -12,12 +12,14 @@ const deckRoutes = new Hono<AuthHonoEnv>();
 // Validation schemas
 const createDeckSchema = z.object({
   title: z.string(),
-  description: z.string().optional()
+  description: z.string().optional(),
+  is_public: z.boolean().optional()
 });
 
 const updateDeckSchema = z.object({
   title: z.string().optional(),
-  description: z.string().optional()
+  description: z.string().optional(),
+  is_public: z.boolean().optional()
 });
 
 const createCardSchema = z.object({
@@ -43,7 +45,8 @@ deckRoutes.post('/', zValidator('json', createDeckSchema), async (c) => {
   const data: CreateDeckData = {
     user_id: user.id,
     title: input.title,
-    description: input.description
+    description: input.description,
+    is_public: input.is_public
   };
   const deck = await deckModel.createDeck(data);
   return c.json(deck, 201);
@@ -70,9 +73,16 @@ deckRoutes.get('/', async (c) => {
   if (!user) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
+
+  const type = c.req.query('type');
   
-  const decks = await deckModel.getUserDecks(user.id);
-  return c.json(decks);
+  if (type === 'public') {
+    const decks = await deckModel.getPublicDecks();
+    return c.json(decks);
+  } else {
+    const decks = await deckModel.getUserDecks(user.id);
+    return c.json(decks);
+  }
 });
 
 // Update a deck
@@ -87,7 +97,8 @@ deckRoutes.patch('/:id', zValidator('json', updateDeckSchema), async (c) => {
   
   const data: UpdateDeckData = {
     title: input.title,
-    description: input.description
+    description: input.description,
+    is_public: input.is_public
   };
   
   const deck = await deckModel.updateDeck(id, user.id, data);
@@ -121,7 +132,7 @@ deckRoutes.get('/:id/cards', async (c) => {
     return c.json({ error: 'Unauthorized' }, 401);
   }
 
-  // Check if user owns the deck
+  // Check if user owns the deck or if it's public
   const deck = await deckModel.getDeck(deckId, user.id);
   if (!deck) {
     return c.json({ error: 'Deck not found' }, 404);
@@ -141,8 +152,8 @@ deckRoutes.post('/:id/cards', zValidator('json', createCardSchema), async (c) =>
 
   // Check if user owns the deck
   const deck = await deckModel.getDeck(deckId, user.id);
-  if (!deck) {
-    return c.json({ error: 'Deck not found' }, 404);
+  if (!deck || deck.user_id !== user.id) {
+    return c.json({ error: 'Unauthorized: You can only add cards to your own decks' }, 403);
   }
 
   const input = c.req.valid('json');
@@ -168,8 +179,8 @@ deckRoutes.patch('/:id/cards/:cardId', zValidator('json', updateCardSchema), asy
 
   // Check if user owns the deck
   const deck = await deckModel.getDeck(deckId, user.id);
-  if (!deck) {
-    return c.json({ error: 'Deck not found' }, 404);
+  if (!deck || deck.user_id !== user.id) {
+    return c.json({ error: 'Unauthorized: You can only modify cards in your own decks' }, 403);
   }
 
   const input = c.req.valid('json');
@@ -197,8 +208,8 @@ deckRoutes.delete('/:id/cards/:cardId', async (c) => {
 
   // Check if user owns the deck
   const deck = await deckModel.getDeck(deckId, user.id);
-  if (!deck) {
-    return c.json({ error: 'Deck not found' }, 404);
+  if (!deck || deck.user_id !== user.id) {
+    return c.json({ error: 'Unauthorized: You can only delete cards from your own decks' }, 403);
   }
 
   const card = await cardModel.deleteCard(cardId, deckId);
