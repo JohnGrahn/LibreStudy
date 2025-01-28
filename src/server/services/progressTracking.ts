@@ -53,12 +53,13 @@ export class ProgressTrackingService {
     const query = {
       text: `
         SELECT 
-          COUNT(*) as total_cards,
-          COUNT(CASE WHEN last_grade >= 4 THEN 1 END) as mastered_cards,
-          COUNT(CASE WHEN last_grade < 4 AND last_grade > 0 THEN 1 END) as cards_to_review,
-          AVG(last_grade) as avg_grade
+          COUNT(DISTINCT c.id) as total_cards,
+          COUNT(DISTINCT CASE WHEN ucp.last_grade >= 4 THEN c.id END) as mastered_cards,
+          COUNT(DISTINCT CASE WHEN ucp.last_grade < 4 AND ucp.last_grade > 0 THEN c.id END) as cards_to_review,
+          AVG(ucp.last_grade) as avg_grade
         FROM cards c
         JOIN decks d ON c.deck_id = d.id
+        LEFT JOIN user_card_progress ucp ON c.id = ucp.card_id AND ucp.user_id = $1
         WHERE d.user_id = $1
       `,
       values: [userId]
@@ -69,8 +70,8 @@ export class ProgressTrackingService {
 
     return {
       totalCards: parseInt(stats.total_cards),
-      masteredCards: parseInt(stats.mastered_cards),
-      cardsToReview: parseInt(stats.cards_to_review),
+      masteredCards: parseInt(stats.mastered_cards) || 0,
+      cardsToReview: parseInt(stats.cards_to_review) || 0,
       averageGrade: parseFloat(stats.avg_grade) || 0
     };
   }

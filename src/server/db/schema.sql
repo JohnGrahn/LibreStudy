@@ -29,7 +29,6 @@ CREATE TABLE cards (
     deck_id INTEGER REFERENCES decks(id) ON DELETE CASCADE,
     front TEXT NOT NULL,
     back TEXT NOT NULL,
-    last_grade INTEGER DEFAULT 0,  -- 0=new, 1=again, 2=hard, 4=good, 5=easy
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

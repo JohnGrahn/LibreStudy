@@ -99,15 +99,12 @@ export class DeckModel extends BaseModel {
     const query = {
       text: `
         SELECT 
-          COUNT(*) as total_cards,
-          COUNT(CASE WHEN last_grade < 4 AND last_grade > 0 THEN 1 END) as due_cards,
-          COUNT(CASE WHEN last_grade >= 4 THEN 1 END) as mastered_cards
-        FROM cards
-        WHERE deck_id = $1
-        AND deck_id IN (
-          SELECT id FROM decks 
-          WHERE user_id = $2 OR is_public = true
-        )
+          COUNT(DISTINCT c.id) as total_cards,
+          COUNT(DISTINCT CASE WHEN ucp.last_grade < 4 AND ucp.last_grade > 0 THEN c.id END) as due_cards,
+          COUNT(DISTINCT CASE WHEN ucp.last_grade >= 4 THEN c.id END) as mastered_cards
+        FROM cards c
+        LEFT JOIN user_card_progress ucp ON c.id = ucp.card_id AND ucp.user_id = $2
+        WHERE c.deck_id = $1
       `,
       values: [id, userId]
     };
@@ -116,8 +113,8 @@ export class DeckModel extends BaseModel {
     const result = await queryClient.query(query);
     return {
       totalCards: parseInt(result.rows[0].total_cards),
-      dueCards: parseInt(result.rows[0].due_cards),
-      masteredCards: parseInt(result.rows[0].mastered_cards)
+      dueCards: parseInt(result.rows[0].due_cards) || 0,
+      masteredCards: parseInt(result.rows[0].mastered_cards) || 0
     };
   }
 
