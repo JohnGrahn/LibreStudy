@@ -1,51 +1,55 @@
 import * as Mantine from '@mantine/core';
 import { IconSearch } from '../components/Icons';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { notifications } from '@mantine/notifications';
+import api from '../lib/api';
 
 interface Test {
   id: number;
   title: string;
-  questionCount: number;
+  question_count: number;
   description: string;
   completed: boolean;
   score?: number;
 }
 
-// Temporary mock data
-const mockTests: Test[] = [
-  { 
-    id: 1, 
-    title: 'Spanish Vocabulary Quiz', 
-    questionCount: 20, 
-    description: 'Test your knowledge of basic Spanish vocabulary',
-    completed: true,
-    score: 85
-  },
-  { 
-    id: 2, 
-    title: 'JavaScript Fundamentals', 
-    questionCount: 15, 
-    description: 'Test your JavaScript basics',
-    completed: false
-  },
-  { 
-    id: 3, 
-    title: 'World Capitals Challenge', 
-    questionCount: 25, 
-    description: 'Test your knowledge of world capitals',
-    completed: true,
-    score: 92
-  },
-];
-
 function TestList() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [tests, setTests] = useState<Test[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadTests();
+  }, []);
+
+  const loadTests = async () => {
+    try {
+      const data = await api('/tests');
+      setTests(data);
+    } catch (error) {
+      notifications.show({
+        title: 'Error',
+        message: error instanceof Error ? error.message : 'Failed to load tests',
+        color: 'red'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
   
-  const filteredTests = mockTests.filter(test => 
+  const filteredTests = tests.filter(test => 
     test.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     test.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  if (loading) {
+    return (
+      <Mantine.Center h="100vh">
+        <Mantine.Loader size="xl" />
+      </Mantine.Center>
+    );
+  }
 
   return (
     <Mantine.Container size="lg">
@@ -62,49 +66,59 @@ function TestList() {
         onChange={(e) => setSearchQuery(e.currentTarget.value)}
       />
 
-      <Mantine.SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
-        {filteredTests.map(test => (
-          <Mantine.Card key={test.id} shadow="sm" padding="lg" radius="md" withBorder>
-            <Mantine.Card.Section withBorder inheritPadding py="xs">
-              <Mantine.Group justify="space-between">
-                <Mantine.Title order={3}>{test.title}</Mantine.Title>
-                {test.completed && test.score !== undefined && (
-                  <Mantine.Badge color={test.score >= 70 ? 'green' : 'red'}>
-                    {test.score}%
-                  </Mantine.Badge>
+      {filteredTests.length === 0 ? (
+        <Mantine.Paper p="xl" withBorder>
+          <Mantine.Text ta="center" c="dimmed">
+            {searchQuery ? 'No tests match your search.' : 'No tests yet. Create your first test to get started!'}
+          </Mantine.Text>
+        </Mantine.Paper>
+      ) : (
+        <Mantine.SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
+          {filteredTests.map(test => (
+            <Mantine.Card key={test.id} shadow="sm" padding="lg" radius="md" withBorder>
+              <Mantine.Card.Section withBorder inheritPadding py="xs">
+                <Mantine.Group justify="space-between">
+                  <Mantine.Title order={3}>{test.title}</Mantine.Title>
+                  {test.completed && test.score !== undefined && (
+                    <Mantine.Badge color={test.score >= 70 ? 'green' : 'red'}>
+                      {test.score}%
+                    </Mantine.Badge>
+                  )}
+                </Mantine.Group>
+              </Mantine.Card.Section>
+              
+              <Mantine.Text mt="md" size="sm" c="dimmed">
+                {test.question_count} questions
+              </Mantine.Text>
+              
+              <Mantine.Text mt="xs">
+                {test.description}
+              </Mantine.Text>
+
+              <Mantine.Group mt="md">
+                {!test.completed && (
+                  <Mantine.Button 
+                    component={Link} 
+                    to={`/tests/${test.id}/take`} 
+                    variant="filled"
+                  >
+                    Take Test
+                  </Mantine.Button>
+                )}
+                {test.completed && (
+                  <Mantine.Button 
+                    component={Link} 
+                    to={`/tests/${test.id}/results`} 
+                    variant="light"
+                  >
+                    View Results
+                  </Mantine.Button>
                 )}
               </Mantine.Group>
-            </Mantine.Card.Section>
-            
-            <Mantine.Text mt="md" size="sm" c="dimmed">
-              {test.questionCount} questions
-            </Mantine.Text>
-            
-            <Mantine.Text mt="xs">
-              {test.description}
-            </Mantine.Text>
-
-            <Mantine.Group mt="md">
-              <Mantine.Button 
-                component={Link} 
-                to={`/tests/${test.id}`} 
-                variant="light"
-              >
-                View Details
-              </Mantine.Button>
-              {!test.completed && (
-                <Mantine.Button 
-                  component={Link} 
-                  to={`/tests/${test.id}/take`} 
-                  variant="filled"
-                >
-                  Take Test
-                </Mantine.Button>
-              )}
-            </Mantine.Group>
-          </Mantine.Card>
-        ))}
-      </Mantine.SimpleGrid>
+            </Mantine.Card>
+          ))}
+        </Mantine.SimpleGrid>
+      )}
     </Mantine.Container>
   );
 }

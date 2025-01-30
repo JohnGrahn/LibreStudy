@@ -1,14 +1,21 @@
-import BaseModel from './BaseModel';
-import { PoolClient } from 'pg';
-import pool from '../db/config';
+import { db } from '../db';
+import type { QuestionType } from './QuestionModel';
+import type { Question } from './QuestionModel';
 
 export interface Test {
   id: number;
   user_id: number;
   deck_id: number;
   title: string;
-  description: string | null;
+  description?: string;
   created_at: Date;
+  questions?: Question[];
+}
+
+export interface TestWithStats extends Test {
+  question_count: number;
+  completed: boolean;
+  score?: number;
 }
 
 export interface CreateTestData {
@@ -23,131 +30,198 @@ export interface UpdateTestData {
   description?: string;
 }
 
-export interface TestWithStats extends Test {
-  total_questions: number;
-  correct_answers: number;
-  completion_rate: number;
-}
-
-export class TestModel extends BaseModel {
-  protected tableName = 'tests';
-  protected columns = ['id', 'user_id', 'deck_id', 'title', 'description', 'created_at'];
-
-  // Create a new test
-  async createTest(data: CreateTestData): Promise<Test> {
-    return this.create(data);
+class TestModel {
+  async createTest(data: CreateTestData): Promise<Test | null> {
+    try {
+      const results = await db.query<Test>(
+        `INSERT INTO tests (user_id, deck_id, title, description)
+         VALUES ($1, $2, $3, $4)
+         RETURNING *`,
+        [data.user_id, data.deck_id, data.title, data.description]
+      );
+      return results[0] || null;
+    } catch (error) {
+      console.error('Error creating test:', error);
+      return null;
+    }
   }
 
-  // Update a test
+  async getTest(id: number, userId: number): Promise<TestWithStats | null> {
+    try {
+      // First get the test with stats
+      const testResults = await db.query<TestWithStats>(
+        `SELECT t.*,
+                COUNT(q.id) as question_count,
+                EXISTS(
+                  SELECT 1 FROM user_answers ua 
+                  JOIN questions q2 ON q2.id = ua.question_id 
+                  WHERE q2.test_id = t.id AND ua.user_id = $2
+                ) as completed,
+                CASE 
+                  WHEN COUNT(ua.id) > 0 THEN 
+                    ROUND(AVG(CASE WHEN ua.is_correct THEN 100 ELSE 0 END))
+                  ELSE NULL 
+                END as score
+         FROM tests t
+         LEFT JOIN questions q ON q.test_id = t.id
+         LEFT JOIN user_answers ua ON ua.question_id = q.id AND ua.user_id = $2
+         WHERE t.id = $1
+         GROUP BY t.id, t.user_id, t.deck_id, t.title, t.description, t.created_at`,
+        [id, userId]
+      );
+
+      if (!testResults[0]) {
+        return null;
+      }
+
+      // Then get the questions with their options
+      const questionsResults = await db.query<Question>(
+        `SELECT q.*,
+                json_agg(
+                  json_build_object(
+                    'id', qo.id,
+                    'content', qo.content,
+                    'is_correct', qo.is_correct,
+                    'match_id', qo.match_id
+                  )
+                ) as options
+         FROM questions q
+         LEFT JOIN question_options qo ON qo.question_id = q.id
+         WHERE q.test_id = $1
+         GROUP BY q.id
+         ORDER BY q.id`,
+        [id]
+      );
+
+      // Combine the results
+      return {
+        ...testResults[0],
+        questions: questionsResults
+      };
+    } catch (error) {
+      console.error('Error getting test:', error);
+      return null;
+    }
+  }
+
+  async getUserTests(userId: number): Promise<TestWithStats[]> {
+    try {
+      const results = await db.query<TestWithStats>(
+        `SELECT t.*,
+                COUNT(q.id) as question_count,
+                EXISTS(
+                  SELECT 1 FROM user_answers ua 
+                  JOIN questions q2 ON q2.id = ua.question_id 
+                  WHERE q2.test_id = t.id AND ua.user_id = $1
+                ) as completed,
+                CASE 
+                  WHEN COUNT(ua.id) > 0 THEN 
+                    ROUND(AVG(CASE WHEN ua.is_correct THEN 100 ELSE 0 END))
+                  ELSE NULL 
+                END as score
+         FROM tests t
+         LEFT JOIN questions q ON q.test_id = t.id
+         LEFT JOIN user_answers ua ON ua.question_id = q.id AND ua.user_id = $1
+         WHERE t.user_id = $1
+         GROUP BY t.id, t.user_id, t.deck_id, t.title, t.description, t.created_at
+         ORDER BY t.created_at DESC`,
+        [userId]
+      );
+      return results;
+    } catch (error) {
+      console.error('Error getting user tests:', error);
+      return [];
+    }
+  }
+
   async updateTest(id: number, userId: number, data: UpdateTestData): Promise<Test | null> {
-    const result = await this.update({ id, user_id: userId }, data);
-    return result[0] || null;
+    try {
+      const results = await db.query<Test>(
+        `UPDATE tests
+         SET title = COALESCE($3, title),
+             description = COALESCE($4, description)
+         WHERE id = $1 AND user_id = $2
+         RETURNING *`,
+        [id, userId, data.title, data.description]
+      );
+      return results[0] || null;
+    } catch (error) {
+      console.error('Error updating test:', error);
+      return null;
+    }
   }
 
-  // Get test by ID and user ID
-  async getTest(id: number, userId: number): Promise<Test | null> {
-    return this.findOne({ id, user_id: userId });
-  }
-
-  // Get all tests for a user
-  async getUserTests(userId: number, options: { orderBy?: string; limit?: number; offset?: number } = {}): Promise<Test[]> {
-    return this.find({ user_id: userId }, options);
-  }
-
-  // Get all tests for a deck
-  async getDeckTests(deckId: number, userId: number, options: { orderBy?: string; limit?: number; offset?: number } = {}): Promise<Test[]> {
-    return this.find({ deck_id: deckId, user_id: userId }, options);
-  }
-
-  // Delete a test
   async deleteTest(id: number, userId: number): Promise<Test | null> {
-    const result = await this.delete({ id, user_id: userId });
-    return result[0] || null;
+    try {
+      const results = await db.query<Test>(
+        `DELETE FROM tests
+         WHERE id = $1 AND user_id = $2
+         RETURNING *`,
+        [id, userId]
+      );
+      return results[0] || null;
+    } catch (error) {
+      console.error('Error deleting test:', error);
+      return null;
+    }
   }
 
-  // Get test with statistics
-  async getTestWithStats(id: number, userId: number): Promise<TestWithStats | null> {
-    const query = {
-      text: `
-        SELECT 
-          t.*,
-          COUNT(DISTINCT q.id) as total_questions,
-          COUNT(DISTINCT CASE WHEN ua.is_correct THEN ua.question_id END) as correct_answers,
-          COALESCE(
-            COUNT(DISTINCT CASE WHEN ua.is_correct THEN ua.question_id END)::float / 
-            NULLIF(COUNT(DISTINCT q.id), 0),
-            0
-          ) as completion_rate
-        FROM ${this.tableName} t
-        LEFT JOIN questions q ON q.test_id = t.id
-        LEFT JOIN user_answers ua ON ua.question_id = q.id AND ua.user_id = t.user_id
-        WHERE t.id = $1 AND t.user_id = $2
-        GROUP BY t.id
-      `,
-      values: [id, userId]
-    };
-
-    const result = await pool.query(query);
-    return result.rows[0] || null;
-  }
-
-  // Get test results summary
   async getTestResults(id: number, userId: number): Promise<{
-    questionId: number;
-    content: string;
-    type: string;
-    userAnswer: string;
-    isCorrect: boolean;
-  }[]> {
-    const query = {
-      text: `
+    total_questions: number;
+    correct_answers: number;
+    score: number;
+    answers: Array<{
+      question_id: number;
+      is_correct: boolean;
+      user_answer: string;
+      correct_answer: string;
+    }>;
+  } | null> {
+    try {
+      const results = await db.query<{
+        total_questions: number;
+        correct_answers: number;
+        score: number;
+        answers: Array<{
+          question_id: number;
+          is_correct: boolean;
+          user_answer: string;
+          correct_answer: string;
+        }>;
+      }>(
+        `WITH answer_data AS (
         SELECT 
-          q.id as question_id,
-          q.content,
-          q.type,
-          ua.answer as user_answer,
-          ua.is_correct
-        FROM questions q
-        LEFT JOIN user_answers ua ON ua.question_id = q.id
-        WHERE q.test_id = $1
-        AND ua.user_id = $2
-        ORDER BY q.id
-      `,
-      values: [id, userId]
-    };
-
-    const result = await pool.query(query);
-    return result.rows;
-  }
-
-  // Get test completion status
-  async getTestCompletion(id: number, userId: number): Promise<{
-    totalQuestions: number;
-    answeredQuestions: number;
-    isComplete: boolean;
-  }> {
-    const query = {
-      text: `
-        SELECT 
-          COUNT(DISTINCT q.id) as total_questions,
-          COUNT(DISTINCT ua.question_id) as answered_questions
+             COUNT(*) as total_questions,
+             COUNT(CASE WHEN ua.is_correct THEN 1 END) as correct_answers,
+             ROUND(AVG(CASE WHEN ua.is_correct THEN 100 ELSE 0 END)) as score,
+             json_agg(json_build_object(
+               'question_id', q.id,
+               'is_correct', ua.is_correct,
+               'user_answer', ua.answer,
+               'correct_answer', 
+               CASE 
+                 WHEN q.type = 'multiple_choice' THEN 
+                   (SELECT content FROM question_options WHERE question_id = q.id AND is_correct = true LIMIT 1)
+                 WHEN q.type = 'true_false' THEN 
+                   CASE WHEN q.correct_answer = 'true' THEN 'True' ELSE 'False' END
+                 ELSE q.correct_answer
+               END
+             )) as answers
         FROM questions q
         LEFT JOIN user_answers ua ON ua.question_id = q.id AND ua.user_id = $2
         WHERE q.test_id = $1
-      `,
-      values: [id, userId]
-    };
-
-    const result = await pool.query(query);
-    const { total_questions, answered_questions } = result.rows[0];
-    
-    return {
-      totalQuestions: parseInt(total_questions),
-      answeredQuestions: parseInt(answered_questions),
-      isComplete: parseInt(total_questions) === parseInt(answered_questions)
-    };
+           GROUP BY q.test_id
+         )
+         SELECT * FROM answer_data`,
+        [id, userId]
+      );
+      
+      return results[0] || null;
+    } catch (error) {
+      console.error('Error getting test results:', error);
+      return null;
+    }
   }
 }
 
-// Export a singleton instance
 export default new TestModel(); 

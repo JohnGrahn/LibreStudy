@@ -27,6 +27,7 @@ export interface CreateQuestionData {
   card_id: number;
   type: QuestionType;
   content: string;
+  correct_answer: string;
   options?: {
     content: string;
     is_correct?: boolean;

@@ -5,12 +5,12 @@ import testModel from '../../models/TestModel';
 import type { CreateTestData, UpdateTestData } from '../../models/TestModel';
 import { TestGeneratorService } from '../../services/testGenerator';
 import type { GenerateTestOptions } from '../../services/testGenerator';
+import type { AuthHonoEnv } from '../../middleware/auth';
 
-const testRoutes = new Hono();
+const testRoutes = new Hono<AuthHonoEnv>();
 
 // Validation schemas
 const createTestSchema = z.object({
-  user_id: z.number(),
   deck_id: z.number(),
   title: z.string(),
   description: z.string().optional(),
@@ -25,9 +25,10 @@ const updateTestSchema = z.object({
 // Create a new test
 testRoutes.post('/', zValidator('json', createTestSchema), async (c) => {
   const input = c.req.valid('json');
+  const user = c.get('user');
   
   const options: GenerateTestOptions = {
-    userId: input.user_id,
+    userId: user.id,
     deckId: input.deck_id,
     title: input.title,
     description: input.description,
@@ -44,9 +45,9 @@ testRoutes.post('/', zValidator('json', createTestSchema), async (c) => {
 // Get a test by ID
 testRoutes.get('/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
-  const userId = parseInt(c.req.query('user_id') || '0');
+  const user = c.get('user');
   
-  const test = await testModel.getTest(id, userId);
+  const test = await testModel.getTest(id, user.id);
   if (!test) {
     return c.json({ error: 'Test not found' }, 404);
   }
@@ -55,15 +56,15 @@ testRoutes.get('/:id', async (c) => {
 
 // Get all tests for a user
 testRoutes.get('/', async (c) => {
-  const userId = parseInt(c.req.query('user_id') || '0');
-  const tests = await testModel.getUserTests(userId);
+  const user = c.get('user');
+  const tests = await testModel.getUserTests(user.id);
   return c.json(tests);
 });
 
 // Update a test
 testRoutes.patch('/:id', zValidator('json', updateTestSchema), async (c) => {
   const id = parseInt(c.req.param('id'));
-  const userId = parseInt(c.req.query('user_id') || '0');
+  const user = c.get('user');
   const input = c.req.valid('json');
   
   const data: UpdateTestData = {
@@ -71,7 +72,7 @@ testRoutes.patch('/:id', zValidator('json', updateTestSchema), async (c) => {
     description: input.description
   };
   
-  const test = await testModel.updateTest(id, userId, data);
+  const test = await testModel.updateTest(id, user.id, data);
   if (!test) {
     return c.json({ error: 'Test not found' }, 404);
   }
@@ -81,10 +82,10 @@ testRoutes.patch('/:id', zValidator('json', updateTestSchema), async (c) => {
 // Submit test answers and get results
 testRoutes.post('/:id/submit', async (c) => {
   const id = parseInt(c.req.param('id'));
-  const userId = parseInt(c.req.query('user_id') || '0');
+  const user = c.get('user');
   const answers = await c.req.json();
   
-  const results = await testModel.getTestResults(id, userId);
+  const results = await testModel.getTestResults(id, user.id);
   if (!results) {
     return c.json({ error: 'Test not found' }, 404);
   }
@@ -94,9 +95,9 @@ testRoutes.post('/:id/submit', async (c) => {
 // Delete a test
 testRoutes.delete('/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
-  const userId = parseInt(c.req.query('user_id') || '0');
+  const user = c.get('user');
   
-  const test = await testModel.deleteTest(id, userId);
+  const test = await testModel.deleteTest(id, user.id);
   if (!test) {
     return c.json({ error: 'Test not found' }, 404);
   }

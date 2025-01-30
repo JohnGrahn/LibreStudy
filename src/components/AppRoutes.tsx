@@ -10,6 +10,9 @@ const DeckView = lazy(() => import('../pages/DeckView'));
 const CreateDeck = lazy(() => import('../pages/CreateDeck'));
 const StudyMode = lazy(() => import('../pages/StudyMode'));
 const TestList = lazy(() => import('../pages/TestList'));
+const CreateTest = lazy(() => import('../pages/CreateTest'));
+const TakeTest = lazy(() => import('../pages/TakeTest'));
+const TestResults = lazy(() => import('../pages/TestResults'));
 const ProgressPage = lazy(() => import('../pages/Progress'));
 const Login = lazy(() => import('../pages/Login'));
 const Register = lazy(() => import('../pages/Register'));
@@ -56,11 +59,16 @@ export function AppRoutes() {
           <Route path=":id/progress" element={<DeckProgress />} />
         </Route>
 
-        <Route path="/tests/*" element={
+        <Route path="/tests" element={
           <ProtectedRoute>
-            <TestList />
+            <Outlet />
           </ProtectedRoute>
-        } />
+        }>
+          <Route index element={<TestList />} />
+          <Route path="new" element={<CreateTest />} />
+          <Route path=":id/take" element={<TakeTest />} />
+          <Route path=":id/results" element={<TestResults />} />
+        </Route>
 
         <Route path="/progress" element={
           <ProtectedRoute>
